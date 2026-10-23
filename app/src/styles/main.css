@@ -1,0 +1,147 @@
+@font-face {
+  font-family: 'Luciole';
+  src: url('../assets/fonts/Luciole-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Luciole';
+  src: url('../assets/fonts/Luciole-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+/* Téléchargée par le navigateur seulement si elle est choisie dans les réglages */
+@font-face {
+  font-family: 'OpenDyslexic';
+  src: url('../assets/fonts/OpenDyslexic-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'OpenDyslexic';
+  src: url('../assets/fonts/OpenDyslexic-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  /* Palette Kitsuné */
+  --color-cream: #fbf5e9;
+  --color-ink: #1f2a55;
+  --color-ink-soft: #46527f;
+  --color-vermilion: #c23b22;
+  --color-fox: #b5531f;
+  --color-fox-dark: #8a3a17;
+  --color-gold: #d4a72c;
+  --color-fur-light: #fffaf2;
+
+  /* Rôles : texte en ink (ou cream sur fond vermilion/ink), or et roux en décor */
+  --color-bg: var(--color-cream);
+  --color-surface: var(--color-fur-light);
+  --color-text: var(--color-ink);
+  --color-accent: var(--color-vermilion);
+
+  --space-xs: 0.25rem;
+  --space-s: 0.5rem;
+  --space-m: 1rem;
+  --space-l: 1.5rem;
+  --space-xl: 2.5rem;
+  --radius: 1rem;
+  --tap-size: 3rem;
+  --border: 2px solid var(--color-ink);
+
+  /* Valeurs par défaut, remplacées par les réglages (stores/settings.ts) */
+  --font-family: 'Luciole', system-ui, sans-serif;
+  --font-size-base: 20px;
+  --line-height: 1.5;
+  --letter-spacing: 0.03em;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: var(--font-size-base);
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-family);
+  line-height: var(--line-height);
+  letter-spacing: var(--letter-spacing);
+  text-align: left;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+}
+
+button,
+input {
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-s);
+  min-height: var(--tap-size);
+  padding: var(--space-s) var(--space-l);
+  border: var(--border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn--primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-cream);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.text-input {
+  width: 100%;
+  min-height: var(--tap-size);
+  padding: var(--space-s) var(--space-m);
+  border: var(--border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
