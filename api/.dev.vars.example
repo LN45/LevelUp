@@ -1,0 +1,4 @@
+# Copier ce fichier en .dev.vars (gitignoré) et remplir les valeurs soi-même.
+# Ne jamais commiter .dev.vars ni coller la clé ailleurs.
+MISTRAL_API_KEY=
+APP_TOKEN=

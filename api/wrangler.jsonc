@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "levelup-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-19",
+  "vars": {
+    "MISTRAL_MODEL": "mistral-small-latest",
+  },
+}
