@@ -1,11 +1,23 @@
 <script setup lang="ts">
+import { useRoute } from 'vue-router'
+
 import { useSettingsStore } from '@/stores/settings'
 
 // Instancié tout de suite pour appliquer police, taille et interligne dès le premier affichage
 useSettingsStore()
 
+const route = useRoute()
+
+// Un onglet reste actif dans ses sous-écrans (ex. /settings/subjects)
+const isActive = (to: string) => (to === '/' ? route.path === '/' : route.path.startsWith(to))
+
 const links = [
   { to: '/', label: 'Accueil', icon: 'M3 11 L12 3 L21 11 V21 H15 V15 H9 V21 H3 Z' },
+  {
+    to: '/subjects',
+    label: 'Matières',
+    icon: 'M3 5 Q8 3 12 6 Q16 3 21 5 V19 Q16 17 12 20 Q8 17 3 19 Z M12 6 V20',
+  },
   {
     to: '/settings',
     label: 'Réglages',
@@ -21,7 +33,13 @@ const links = [
     </main>
 
     <nav class="bottom-nav" aria-label="Navigation principale">
-      <RouterLink v-for="link in links" :key="link.to" :to="link.to" class="nav-link">
+      <RouterLink
+        v-for="link in links"
+        :key="link.to"
+        :to="link.to"
+        class="nav-link"
+        :class="{ 'nav-link--active': isActive(link.to) }"
+      >
         <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="link.icon" /></svg>
         {{ link.label }}
       </RouterLink>
@@ -67,7 +85,7 @@ const links = [
   font-size: 0.85rem;
   text-decoration: none;
 }
-.nav-link.router-link-exact-active {
+.nav-link--active {
   border-top-color: var(--color-gold);
   font-weight: 700;
 }

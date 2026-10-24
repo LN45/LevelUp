@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import type { StyleValue } from 'vue'
+import { ref, type StyleValue } from 'vue'
 
 import SpeakButton from '@/components/SpeakButton.vue'
+import { isStoragePersisted } from '@/db'
 import { FONT_SIZES, NICKNAME_MAX_LENGTH, useSettingsStore, type Settings } from '@/stores/settings'
 
 type ChoiceKey = 'font' | 'fontSize' | 'lineHeight' | 'speechRate'
@@ -58,6 +59,16 @@ function choose(key: ChoiceKey, value: Settings[ChoiceKey]) {
 
 const sample =
   'Le renard roux vit dans la forêt. Il chasse la nuit et dort le jour dans son terrier.'
+
+const STORAGE_MESSAGES = {
+  true: '✅ Les données sont protégées sur cet appareil.',
+  false: '⚠️ Le navigateur pourrait effacer les données s’il manque de place.',
+  null: 'ℹ️ Protection des données indisponible ici (connexion non sécurisée). Elle sera active sur la version en ligne.',
+}
+const storageMessage = ref('')
+void isStoragePersisted().then((persisted) => {
+  storageMessage.value = STORAGE_MESSAGES[`${persisted}`]
+})
 </script>
 
 <template>
@@ -102,6 +113,16 @@ const sample =
         <p>{{ sample }}</p>
         <SpeakButton :text="sample" />
       </div>
+    </div>
+
+    <div class="field">
+      <h2>Matières</h2>
+      <RouterLink to="/settings/subjects" class="btn">Gérer les matières</RouterLink>
+    </div>
+
+    <div class="field">
+      <h2>Données</h2>
+      <p class="storage">{{ storageMessage }}</p>
     </div>
   </section>
 </template>

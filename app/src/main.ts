@@ -4,7 +4,10 @@ import { createPinia } from 'pinia'
 import './styles/main.css'
 
 import App from './App.vue'
+import { requestPersistentStorage } from './db'
 import router from './router'
+
+void requestPersistentStorage()
 
 const app = createApp(App)
 

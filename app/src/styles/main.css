@@ -105,7 +105,9 @@ input {
   border: var(--border);
   border-radius: var(--radius);
   background: var(--color-surface);
+  color: var(--color-text);
   font-weight: 700;
+  text-decoration: none;
   cursor: pointer;
 }
 .btn--primary {
