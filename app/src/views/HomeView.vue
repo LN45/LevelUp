@@ -11,9 +11,13 @@ const { settings } = storeToRefs(useSettingsStore())
 const isFirstVisit = computed(() => settings.value.nickname === null)
 const nicknameDraft = ref('')
 
+// Titre de la leçon tout juste enregistrée (transmis par NewLessonView via l'état de navigation)
+const savedLesson: unknown = history.state?.savedLesson
+
 const message = computed(() => {
   if (isFirstVisit.value)
     return 'Bienvenue ! Je suis ton kitsuné. Comment veux-tu que je t’appelle ?'
+  if (typeof savedLesson === 'string') return `Bravo ! La leçon « ${savedLesson} » est enregistrée.`
   const name = settings.value.nickname
   return name ? `Salut ${name} ! On révise ensemble ?` : 'Salut ! On révise ensemble ?'
 })
@@ -25,7 +29,10 @@ function saveNickname(nickname: string) {
 
 <template>
   <section class="home">
-    <KitsuneMascot class="mascot" :mood="isFirstVisit ? 'encouraging' : 'happy'" />
+    <KitsuneMascot
+      class="mascot"
+      :mood="isFirstVisit ? 'encouraging' : savedLesson ? 'proud' : 'happy'"
+    />
 
     <div class="bubble">
       <p>{{ message }}</p>
@@ -47,6 +54,10 @@ function saveNickname(nickname: string) {
       </button>
       <button type="button" class="btn" @click="saveNickname('')">Plus tard</button>
     </form>
+
+    <RouterLink v-else to="/lessons/new" class="btn btn--primary main-action">
+      📷 Ajouter un cours
+    </RouterLink>
   </section>
 </template>
 
@@ -55,6 +66,11 @@ function saveNickname(nickname: string) {
   display: flex;
   flex-direction: column;
   gap: var(--space-l);
+}
+
+.main-action {
+  min-height: 3.5rem;
+  font-size: 1.1rem;
 }
 
 .mascot {

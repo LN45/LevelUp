@@ -84,7 +84,8 @@ h3 {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
   letter-spacing: inherit;
   color: inherit;

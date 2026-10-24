@@ -2,6 +2,7 @@
 import { storeToRefs } from 'pinia'
 import { computed, ref, useTemplateRef } from 'vue'
 
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { CUSTOM_SUBJECT_STYLE, SUBJECT_CATALOG, type NewSubject, type Subject } from '@/db'
 import {
   SUBJECT_NAME_MAX_LENGTH,
@@ -45,20 +46,16 @@ async function rename(subject: Subject, event: Event) {
   status.value = error ? ERRORS[error] : 'Nom enregistré.'
 }
 
-const confirmDialog = useTemplateRef<HTMLDialogElement>('confirm-dialog')
+const confirmDialog = useTemplateRef('confirm-dialog')
 const pending = ref<{ subject: Subject; lessonCount: number } | null>(null)
 
 async function askRemove(subject: Subject) {
   pending.value = { subject, lessonCount: await store.countLessons(subject.id) }
-  confirmDialog.value?.showModal()
-}
-
-async function confirmRemove() {
-  if (!pending.value) return
-  const { id, name } = pending.value.subject
-  await store.remove(id)
-  confirmDialog.value?.close()
-  status.value = `« ${name} » supprimée.`
+  if (await confirmDialog.value?.open()) {
+    await store.remove(subject.id)
+    status.value = `« ${subject.name} » supprimée.`
+  }
+  pending.value = null
 }
 </script>
 
@@ -122,7 +119,7 @@ async function confirmRemove() {
       </div>
     </form>
 
-    <dialog ref="confirm-dialog" class="confirm" @close="pending = null">
+    <ConfirmDialog ref="confirm-dialog" confirm-label="Supprimer">
       <template v-if="pending">
         <p>
           <strong>Supprimer « {{ pending.subject.name }} » ?</strong>
@@ -136,14 +133,8 @@ async function confirmRemove() {
         </p>
         <p v-else>Elle ne contient aucune leçon.</p>
         <p>On ne pourra pas revenir en arrière.</p>
-        <div class="actions">
-          <button type="button" class="btn" autofocus @click="confirmDialog?.close()">
-            Annuler
-          </button>
-          <button type="button" class="btn btn--primary" @click="confirmRemove">Supprimer</button>
-        </div>
       </template>
-    </dialog>
+    </ConfirmDialog>
   </section>
 </template>
 
@@ -216,26 +207,5 @@ h2 {
 .custom-row {
   display: flex;
   gap: var(--space-s);
-}
-
-.confirm {
-  max-width: min(30rem, calc(100% - 2 * var(--space-m)));
-  padding: var(--space-l);
-  border: var(--border);
-  border-radius: var(--radius);
-  background: var(--color-bg);
-  color: var(--color-text);
-}
-.confirm::backdrop {
-  background: rgb(31 42 85 / 60%);
-}
-.confirm p {
-  margin: 0 0 var(--space-m);
-}
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-s);
-  justify-content: flex-end;
 }
 </style>
