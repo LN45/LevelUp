@@ -39,9 +39,9 @@ Utilisation principale : **sur téléphone portable**. Pas d'oral en réponse po
 
 ### Backend — `api/`
 - **Hono** sur **Cloudflare Workers, plan gratuit** (dev local avec `wrangler dev`)
-- IA : **Mistral, plan gratuit « Experiment »**, via le SDK officiel `@mistralai/mistralai`. Modèle configurable via la variable d'env `MISTRAL_MODEL` (défaut : `mistral-small-latest`, qui accepte les images)
+- IA : **Cloudflare Workers AI** (allocation gratuite quotidienne), appelé via la liaison `AI` du Worker : aucune clé API, aucun compte tiers. Modèle configurable via la variable `AI_MODEL` (défaut : `@cf/mistralai/mistral-small-3.1-24b-instruct`, qui accepte les images). En local, `wrangler dev` appelle le vrai Workers AI (nécessite `wrangler login`)
 - **Zod** : validation des entrées et des sorties de l'IA
-- Sorties structurées : utiliser le mode JSON schema de Mistral (`response_format`) pour forcer un JSON conforme, puis **toujours** valider avec Zod
+- Sorties structurées : JSON schema imposé au modèle (`guided_json`, généré depuis le schéma Zod), puis **toujours** valider avec Zod
 - Tout l'appel au fournisseur d'IA est isolé dans **un seul module**, pour pouvoir passer plus tard à un autre fournisseur (ex. API Claude) sans toucher au reste
 - Seul rôle du backend : cacher la clé API, appeler l'IA, limiter l'usage
 - Rester dans les limites du plan gratuit Workers (10 ms de CPU par requête : pas de traitement d'image lourd côté Worker, la compression se fait côté client)
@@ -52,13 +52,14 @@ Utilisation principale : **sur téléphone portable**. Pas d'oral en réponse po
 - Aucun service payant, aucune carte bancaire.
 
 ### Sécurité
-- La clé Mistral n'est **jamais** dans le front, ni dans le dépôt, ni dans un fichier commité, ni dans un log, ni dans la conversation. En production, c'est un secret Cloudflare (`wrangler secret put`) ; en local, `api/.dev.vars` (gitignoré dès l'étape 0).
+- Pas de clé d'IA (Workers AI passe par la liaison du Worker). Le seul secret est `APP_TOKEN` : **jamais** dans le dépôt, un fichier commité, un log ou la conversation. En production, c'est un secret Cloudflare (`wrangler secret put`) ; en local, `api/.dev.vars` et `app/.env.local` (gitignorés), créés par la commande du README sans afficher le jeton.
+- Claude n'a pas le droit de lire ni modifier `api/.dev.vars` et les fichiers `.env*` locaux (règles `deny` dans `.claude/settings.json`).
 - **CORS** restreint à l'origine GitHub Pages de l'appli (et `localhost` / IP locale en dev uniquement).
 - **Jeton d'appli** (`APP_TOKEN`) vérifié sur chaque requête. C'est une barrière légère : il est visible dans le bundle front, donc il ne remplace ni le CORS ni le quota.
 - **Quota quotidien** côté Worker (compteur dans Workers KV, plan gratuit), avec un message clair dans l'appli quand il est atteint.
 - **Limites de taille** sur les images (nombre et poids) et sur le texte envoyé ; rejet de tout ce qui ne correspond pas au schéma Zod.
 - Ne jamais logger le contenu des cours ni les réponses de l'IA ; logger seulement les erreurs techniques.
-- Ne jamais envoyer à l'IA le nom de l'élève ni d'information personnelle (le plan gratuit Mistral peut utiliser les requêtes pour entraîner ses modèles).
+- Ne jamais envoyer à l'IA le nom de l'élève ni d'information personnelle (principe de précaution, quel que soit le fournisseur d'IA).
 - Dépendances : versions fixées, pas de paquet exotique.
 
 ### Sécurité du dépôt GitHub (public)
@@ -72,8 +73,7 @@ Quand une étape en a besoin, **arrête-toi**, explique précisément quoi faire
 - créer le dépôt GitHub et activer GitHub Pages (source : GitHub Actions) ;
 - sécuriser le compte et le dépôt GitHub : double authentification (passkey ou appli), *secret scanning* + *push protection*, alertes Dependabot, règle sur `main` interdisant force push et suppression, approbation requise pour les workflows de contributeurs extérieurs ;
 - créer le compte Cloudflare et lancer `wrangler login` ;
-- créer le compte Mistral, activer le plan Experiment et générer la clé API ;
-- saisir les secrets moi-même (`wrangler secret put MISTRAL_API_KEY`, `wrangler secret put APP_TOKEN`, et `api/.dev.vars` en local). **Ne me demande jamais de te coller une clé.**
+- générer le jeton d'appli moi-même (commande du README en local, `wrangler secret put APP_TOKEN` en production). **Ne me demande jamais de te coller un secret.**
 
 ## Accessibilité dys (exigences transverses, à respecter à chaque étape)
 
@@ -115,7 +115,7 @@ L'appli est construite autour de l'univers des kitsunés (renards du folklore ja
 - [x] **Étape 0 — Initialisation** : dépôt git (+ dépôt GitHub et sa sécurisation, actions manuelles), `.gitignore` incluant `CLAUDE.local.md`, `.dev.vars` et `.env*` (à vérifier **avant** le premier commit), `app/` (Vite + Vue + TS strict, Pinia, Router, ESLint, Prettier, Vitest) et `api/` (Hono + Wrangler). Scripts pour lancer les deux. Lancement de Vite avec `--host` pour tester sur téléphone en Wi-Fi. README court.
 - [x] **Étape 1 — Socle visuel accessible** : design tokens (couleurs, espacements, typo) selon la palette Kitsuné, mascotte SVG et ses états, police Luciole, layout mobile avec navigation en bas, composant de lecture vocale réutilisable, écran Réglages (police, taille, interligne) persisté.
 - [x] **Étape 2 — Données locales** : base Dexie avec les entités ci-dessus, `navigator.storage.persist()`, stores Pinia, gestion des matières.
-- [ ] **Étape 3 — API : socle + extraction** : comptes Cloudflare et Mistral + secrets (actions manuelles), module fournisseur IA, middleware jeton, CORS, limites de taille, quota quotidien KV ; route `POST /extract` (images → texte propre du cours via la vision du modèle).
+- [x] **Étape 3 — API : socle + extraction** : compte Cloudflare, `wrangler login` et jeton d'appli (actions manuelles), module fournisseur IA (Workers AI), middleware jeton, CORS, limites de taille, quota quotidien KV ; route `POST /extract` (images → texte propre du cours via la vision du modèle).
 - [ ] **Étape 4 — Capture du cours** : plusieurs photos par leçon, compression côté client (~1600 px, JPEG), import PDF (texte via pdfjs, sinon pages en images), appel à `/extract`, **écran de relecture et correction** du texte, choix de la matière, enregistrement de la leçon.
 - [ ] **Étape 5 — API : génération** : route `POST /generate` (texte → fiche + flashcards + quiz) en sortie structurée validée par Zod, prompt intégrant les contraintes dys.
 - [ ] **Étape 6 — Affichage de la fiche** : rendu lisible, lecture vocale par section, liste des leçons par matière.

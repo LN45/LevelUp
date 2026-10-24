@@ -7,15 +7,18 @@
     "dev": "wrangler dev",
     "types": "wrangler types",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "lint": "eslint . --fix --cache"
   },
   "dependencies": {
-    "hono": "4.13.13"
+    "hono": "4.13.13",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "eslint": "10.13.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.0",
+    "vitest": "4.1.12",
     "wrangler": "4.152.0"
   }
 }

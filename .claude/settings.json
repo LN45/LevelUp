@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./api/.dev.vars)",
+      "Read(./**/.env)",
+      "Read(./**/.env.local)",
+      "Read(./**/.env.*.local)",
+      "Edit(./api/.dev.vars)",
+      "Edit(./**/.env)",
+      "Edit(./**/.env.local)",
+      "Edit(./**/.env.*.local)"
+    ]
+  }
+}

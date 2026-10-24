@@ -1,4 +1,3 @@
-# Copier ce fichier en .dev.vars (gitignoré) et remplir les valeurs soi-même.
-# Ne jamais commiter .dev.vars ni coller la clé ailleurs.
-MISTRAL_API_KEY=
+# api/.dev.vars (gitignoré) est créé par la commande « Jeton d'appli » du README.
+# Ne jamais commiter .dev.vars ni copier son contenu ailleurs.
 APP_TOKEN=

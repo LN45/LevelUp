@@ -3,7 +3,7 @@
 Appli mobile (PWA) d'aide aux révisions pour les collégiens avec des troubles dys : photo du cours → fiche, flashcards et quiz à cocher.
 
 - `app/` : front Vue 3 + Vite + TypeScript
-- `api/` : petite API Hono sur Cloudflare Workers (cache la clé IA, limite l'usage)
+- `api/` : petite API Hono sur Cloudflare Workers qui appelle Workers AI et limite l'usage
 
 Contexte, règles et feuille de route : voir [CLAUDE.md](CLAUDE.md).
 
@@ -17,7 +17,27 @@ Contexte, règles et feuille de route : voir [CLAUDE.md](CLAUDE.md).
 npm install
 ```
 
-Pour l'API en local, copier `api/.dev.vars.example` en `api/.dev.vars` et remplir les valeurs (fichier gitignoré, à ne jamais commiter).
+### Compte Cloudflare
+
+L'API utilise Workers AI, y compris en local : il faut un compte Cloudflare (gratuit) puis, une fois :
+
+```sh
+npx -w api wrangler login
+```
+
+### Jeton d'appli
+
+Le jeton qui protège l'API doit être identique dans `api/.dev.vars` et `app/.env.local` (deux fichiers gitignorés). Pour le générer sans l'afficher, lancer une fois dans PowerShell, à la racine du projet :
+
+```powershell
+$bytes = New-Object byte[] 32
+[Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+$token = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+$utf8 = New-Object Text.UTF8Encoding $false
+[IO.File]::WriteAllText("$PWD\api\.dev.vars", "APP_TOKEN=$token`n", $utf8)
+[IO.File]::WriteAllText("$PWD\app\.env.local", "VITE_APP_TOKEN=$token`n", $utf8)
+Remove-Variable token, bytes
+```
 
 ## Lancer en dev
 
@@ -46,3 +66,5 @@ npm run dev
 | `npm run format`       | Prettier sur tout le dépôt                                                |
 | `npm run typecheck`    | vérification TypeScript (app + api)                                       |
 | `npm run types -w api` | régénère les types Workers après une modification de `api/wrangler.jsonc` |
+
+Pour essayer l'extraction sur de vraies photos (API lancée) : `.\api\scripts\try-extract.ps1 photo1.jpg [photo2.jpg ...]`.

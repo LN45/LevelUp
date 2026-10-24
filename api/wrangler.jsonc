@@ -3,7 +3,22 @@
   "name": "levelup-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-19",
+  // Workers AI : appelé via la liaison, aucune clé API à gérer.
+  // Toujours distant, même avec wrangler dev (décompté de l'allocation gratuite quotidienne).
+  "ai": {
+    "binding": "AI",
+    "remote": true,
+  },
+  // Compteur du quota quotidien (simulé en local par wrangler dev)
+  "kv_namespaces": [
+    {
+      "binding": "QUOTA",
+    },
+  ],
   "vars": {
-    "MISTRAL_MODEL": "mistral-small-latest",
+    "AI_MODEL": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+    "DAILY_LIMIT": "50",
+    // Origines autorisées (séparées par des virgules) ; l'URL GitHub Pages sera ajoutée à l'étape 12
+    "ALLOWED_ORIGINS": "http://localhost:5173",
   },
 }

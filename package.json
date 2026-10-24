@@ -12,11 +12,16 @@
     "build": "npm run build -w app",
     "lint": "npm run lint --workspaces",
     "format": "prettier --write .",
-    "test": "npm run test -w app",
+    "test": "npm run test --workspaces",
     "typecheck": "npm run typecheck --workspaces"
   },
   "engines": {
     "node": ">=24.12.0"
+  },
+  "overrides": {
+    "miniflare": {
+      "undici": "7.30.1"
+    }
   },
   "devDependencies": {
     "concurrently": "10.0.6",
