@@ -29,7 +29,8 @@ const links = [
 <template>
   <div class="layout">
     <main class="content">
-      <RouterView />
+      <!-- Clé = chemin : une leçon ou une matière différente recharge bien la vue -->
+      <RouterView :key="route.path" />
     </main>
 
     <nav class="bottom-nav" aria-label="Navigation principale">

@@ -1,3 +1,5 @@
+import type { GeneratedContent } from './db'
+
 const API_URL = import.meta.env.VITE_API_URL ?? '/api'
 const APP_TOKEN = import.meta.env.VITE_APP_TOKEN ?? ''
 
@@ -15,7 +17,8 @@ const ERROR_MESSAGES = {
   quota_exceeded: 'On a beaucoup travaillé aujourd’hui ! Réessaie demain.',
   illegible:
     'Je n’arrive pas à lire les photos. Essaie avec plus de lumière, le cahier bien à plat.',
-  ai_failed: 'Je n’ai pas réussi à lire le cours cette fois. Réessaie dans un moment.',
+  ai_failed: 'Je n’ai pas réussi cette fois. Réessaie dans un moment.',
+  invalid_request: 'Ce cours est trop court (ou trop long) pour que je puisse travailler dessus.',
   payload_too_large: 'Les photos sont trop lourdes. Essaie avec moins de photos.',
   unauthorized: 'L’appli n’est pas bien configurée. Demande à un adulte de vérifier le jeton.',
   unknown: 'Oups, un problème est survenu. Réessaie.',
@@ -57,4 +60,13 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 
 export function extractCourse(images: ImagePayload[]): Promise<{ title: string; text: string }> {
   return post('/extract', { images })
+}
+
+/** Fiche, flashcards et quiz d'une leçon (aucune donnée personnelle envoyée) */
+export function generateLesson(course: {
+  title: string
+  subject: string
+  text: string
+}): Promise<GeneratedContent> {
+  return post('/generate', course)
 }

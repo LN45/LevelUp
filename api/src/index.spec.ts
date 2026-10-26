@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { isGrounded, normalize, normalizeQuestion, shuffleChoices } from './generate'
 import { app } from './index'
 
 const TOKEN = 'jeton-de-test'
@@ -27,9 +28,9 @@ function createEnv(aiResponse: unknown = JSON.stringify(EXTRACTION)) {
 
 let env: ReturnType<typeof createEnv>
 
-function post(body: unknown, token = TOKEN) {
+function post(body: unknown, token = TOKEN, path = '/extract') {
   return app.request(
-    '/extract',
+    path,
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -135,5 +136,161 @@ describe('API', () => {
     expect(res.status).toBe(429)
     expect(await res.json()).toEqual({ error: 'quota_exceeded' })
     expect(env.AI.run).toHaveBeenCalledTimes(2)
+  })
+})
+
+const COURSE = {
+  title: 'Les volcans',
+  subject: 'Sciences et technologie',
+  text: 'Un volcan est une montagne qui crache de la lave. La lave sort par le cratère.',
+}
+
+const SOURCE = 'Un volcan est une montagne qui crache de la lave.'
+const sentence = (text: string, source = SOURCE) => ({ source, sentence: text })
+const card = (front: string) => ({ front, back: 'Réponse' })
+const mcq = (question: string, choices = ['La lave', 'La neige', 'Le sable'], answer = 0) => ({
+  type: 'mcq' as const,
+  question,
+  choices,
+  answer,
+  explanation: 'Bravo, c’est la lave.',
+})
+const trueFalse = (question: string, answer = 0) => ({
+  type: 'true-false' as const,
+  question,
+  choices: ['Oui', 'Non'],
+  answer,
+  explanation: 'C’est écrit dans le cours.',
+})
+
+const GENERATED = {
+  summary: [sentence(' Un **volcan** crache de la lave. '), sentence('B'), sentence('C')],
+  definitions: [
+    {
+      source: 'La lave sort par le cratère.',
+      term: 'Cratère',
+      definition: 'Le trou en haut du volcan.',
+    },
+  ],
+  flashcards: [
+    card('Qu’est-ce qu’un volcan ?'),
+    card('Où sort la lave ?'),
+    card('Volcan endormi ?'),
+  ],
+  quiz: [mcq('Que crache un volcan ?'), mcq('Q2'), trueFalse('La lave sort par le cratère.')],
+}
+
+const generateRequest = (body: unknown = COURSE) => post(body, TOKEN, '/generate')
+
+describe('POST /generate', () => {
+  it('génère la fiche, les cartes et le quiz', async () => {
+    env = createEnv(JSON.stringify(GENERATED))
+    const res = await generateRequest()
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as ReturnType<typeof normalize>
+
+    expect(body.sheet.summary).toEqual(['Un **volcan** crache de la lave.', 'B', 'C'])
+    expect(body.flashcards).toHaveLength(3)
+    // La bonne réponse suit le mélange des choix
+    const first = body.quiz[0]
+    expect(first?.choices[first.answer]).toBe('La lave')
+    expect(body.quiz[2]).toMatchObject({ type: 'true-false', choices: ['Vrai', 'Faux'], answer: 0 })
+
+    const [, inputs] = env.AI.run.mock.calls[0] as unknown as [
+      string,
+      { messages: { content: unknown }[] },
+    ]
+    expect(JSON.stringify(inputs.messages[1]?.content)).toContain(
+      'Matière : Sciences et technologie',
+    )
+  })
+
+  it('refuse un cours trop court sans consommer de quota', async () => {
+    env = createEnv(JSON.stringify(GENERATED))
+    for (let i = 0; i < 3; i++) {
+      expect((await generateRequest({ ...COURSE, text: 'Trop court.' })).status).toBe(400)
+    }
+    expect((await generateRequest()).status).toBe(200)
+  })
+
+  it('réessaie une fois si la réponse est inexploitable, en ne comptant qu’un quota', async () => {
+    env = createEnv()
+    env.AI.run = vi
+      .fn()
+      .mockResolvedValueOnce({ response: '{"pas": "le bon format"}' })
+      .mockResolvedValueOnce({ response: JSON.stringify(GENERATED) })
+    expect((await generateRequest()).status).toBe(200)
+    expect(env.AI.run).toHaveBeenCalledTimes(2)
+    expect(await env.QUOTA.get(`quota:${new Date().toISOString().slice(0, 10)}`)).toBe('1')
+  })
+
+  it('renvoie ai_failed après deux réponses trop pauvres', async () => {
+    env = createEnv(JSON.stringify({ ...GENERATED, quiz: [mcq('Une seule question')] }))
+    const res = await generateRequest()
+    expect(res.status).toBe(502)
+    expect(await res.json()).toEqual({ error: 'ai_failed' })
+    expect(env.AI.run).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('nettoyage de la sortie de l’IA', () => {
+  it('écarte les questions mal formées', () => {
+    expect(normalizeQuestion(mcq('Deux choix', ['A', 'B']))).toBeNull()
+    expect(normalizeQuestion(mcq('Doublon', ['A', 'a', 'B']))).toBeNull()
+    expect(normalizeQuestion(mcq('Hors limites', ['A', 'B', 'C'], 3))).toBeNull()
+    expect(normalizeQuestion(trueFalse('Vrai/faux impossible', 2))).toBeNull()
+    expect(normalizeQuestion({ ...mcq('Sans explication'), explanation: ' ' })).toBeNull()
+  })
+
+  it('plafonne les quantités', () => {
+    const many = <T>(item: T) => Array<T>(12).fill(item)
+    const result = normalize(
+      {
+        summary: many(sentence('Phrase')),
+        definitions: many({ source: SOURCE, term: 'Mot', definition: 'Sens' }),
+        flashcards: many(card('Carte')),
+        quiz: many(mcq('Question')),
+      },
+      COURSE.text,
+    )
+    expect(result.sheet.summary).toHaveLength(6)
+    expect(result.sheet.definitions).toHaveLength(6)
+    expect(result.flashcards).toHaveLength(10)
+    expect(result.quiz).toHaveLength(6)
+  })
+
+  it('reconnaît une citation du cours malgré accents, ponctuation et Markdown', () => {
+    const course = '## Les êtres vivants\n- Stérile : qui ne peut pas avoir de petits.'
+    expect(isGrounded('Stérile : qui ne peut pas avoir de petits', course)).toBe(true)
+    expect(isGrounded('sterile, qui ne peut pas avoir de petits !', course)).toBe(true)
+    expect(isGrounded('Stérile : qui peut avoir des petits.', course)).toBe(false)
+    expect(isGrounded('Stérile', course)).toBe(false)
+  })
+
+  it('écarte les phrases et définitions dont la citation est absente du cours', () => {
+    const result = normalize(
+      {
+        ...GENERATED,
+        summary: [
+          ...GENERATED.summary,
+          sentence('Inventé', 'Les volcans fabriquent du chocolat chaud.'),
+        ],
+        definitions: [
+          ...GENERATED.definitions,
+          { source: 'Phrase absente du cours.', term: 'Faux', definition: 'Inventé.' },
+        ],
+      },
+      COURSE.text,
+    )
+    expect(result.sheet.summary).not.toContain('Inventé')
+    expect(result.sheet.definitions.map((d) => d.term)).toEqual(['Cratère'])
+  })
+
+  it('mélange les choix sans perdre la bonne réponse', () => {
+    const question = { ...mcq('Q'), choices: ['A', 'B', 'C'], answer: 0 }
+    // random() = 0 : chaque élément est échangé avec le premier
+    const shuffled = shuffleChoices(question, () => 0)
+    expect(shuffled.choices).toEqual(['B', 'C', 'A'])
+    expect(shuffled.choices[shuffled.answer]).toBe('A')
   })
 })

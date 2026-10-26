@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { computed, onBeforeUnmount, reactive, ref, useTemplateRef } from 'vue'
-import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
 import { ApiError, MAX_IMAGES, extractCourse } from '@/api'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -23,7 +23,9 @@ const step = ref<Step>('photos')
 const photos = ref<{ blob: Blob; url: string }[]>([])
 const busy = ref(false)
 const message = ref('')
-const draft = reactive({ title: '', text: '', subjectId: null as number | null })
+// Matière déjà choisie quand on vient de la page d'une matière (?subject=id)
+const presetSubject = Number(useRoute().query.subject) || null
+const draft = reactive({ title: '', text: '', subjectId: presetSubject })
 let saved = false
 
 const PHOTO_TIP = 'Prends ton cours en photo, page par page, bien à plat et avec de la lumière.'
@@ -118,9 +120,14 @@ async function readCourse() {
 
 async function save() {
   if (draft.subjectId === null) return
-  await lessonsStore.add({ subjectId: draft.subjectId, title: draft.title, sourceText: draft.text })
+  const id = await lessonsStore.add({
+    subjectId: draft.subjectId,
+    title: draft.title,
+    sourceText: draft.text,
+  })
   saved = true
-  await router.push({ name: 'home', state: { savedLesson: draft.title.trim() } })
+  // La page de la leçon lance la préparation de la fiche
+  await router.push({ name: 'lesson', params: { id }, state: { justSaved: true } })
 }
 
 const leaveDialog = useTemplateRef('leave-dialog')

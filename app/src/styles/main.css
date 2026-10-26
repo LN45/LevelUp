@@ -121,6 +121,19 @@ textarea {
   cursor: not-allowed;
 }
 
+/* Bloc encadré (liste de leçons, points de fiche…) ; utilisable sur un lien */
+.card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-m);
+  padding: var(--space-m);
+  border: var(--border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
 .text-input {
   width: 100%;
   min-height: var(--tap-size);

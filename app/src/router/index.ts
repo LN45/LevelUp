@@ -1,8 +1,12 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 
 import HomeView from '@/views/HomeView.vue'
+import LessonEditView from '@/views/LessonEditView.vue'
+import LessonView from '@/views/LessonView.vue'
+import LessonsSettingsView from '@/views/LessonsSettingsView.vue'
 import NewLessonView from '@/views/NewLessonView.vue'
 import SettingsView from '@/views/SettingsView.vue'
+import SubjectLessonsView from '@/views/SubjectLessonsView.vue'
 import SubjectsSettingsView from '@/views/SubjectsSettingsView.vue'
 import SubjectsView from '@/views/SubjectsView.vue'
 
@@ -12,9 +16,13 @@ const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: HomeView },
     { path: '/lessons/new', name: 'new-lesson', component: NewLessonView },
+    { path: '/lessons/:id(\\d+)', name: 'lesson', component: LessonView },
     { path: '/subjects', name: 'subjects', component: SubjectsView },
+    { path: '/subjects/:id(\\d+)', name: 'subject', component: SubjectLessonsView },
     { path: '/settings', name: 'settings', component: SettingsView },
     { path: '/settings/subjects', name: 'settings-subjects', component: SubjectsSettingsView },
+    { path: '/settings/lessons', name: 'settings-lessons', component: LessonsSettingsView },
+    { path: '/settings/lessons/:id(\\d+)', name: 'settings-lesson', component: LessonEditView },
   ],
 })
 

@@ -116,8 +116,9 @@ void isStoragePersisted().then((persisted) => {
     </div>
 
     <div class="field">
-      <h2>Matières</h2>
+      <h2>Matières et leçons</h2>
       <RouterLink to="/settings/subjects" class="btn">Gérer les matières</RouterLink>
+      <RouterLink to="/settings/lessons" class="btn">Gérer les leçons</RouterLink>
     </div>
 
     <div class="field">

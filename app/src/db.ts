@@ -17,12 +17,18 @@ export interface Lesson {
   createdAt: Date
 }
 
-// Contenu détaillé des fiches, cartes et quiz affiné aux étapes 5 à 9 :
-// seuls les champs indexés sont figés par le schéma.
+// Les textes de la fiche, des cartes et du quiz peuvent contenir des mots-clés en **gras**.
+// Seuls les champs indexés sont figés par le schéma : ces types peuvent évoluer sans migration.
+export interface SheetContent {
+  /** Petit résumé du cours, une phrase courte par élément */
+  summary: string[]
+  definitions: { term: string; definition: string }[]
+}
+
 export interface Sheet {
   id: number
   lessonId: number
-  content: string
+  content: SheetContent
 }
 
 export interface Card {
@@ -86,6 +92,30 @@ db.version(1).stores({
   quizQuestions: '++id, lessonId',
 })
 
+/** Ancienne forme de la fiche (version 1) : points clés en blocs avec exemple facultatif */
+interface SheetContentV1 {
+  keyPoints?: { text: string; example?: string }[]
+}
+
+// Version 2 : les points clés deviennent les phrases d'un petit résumé (index inchangés)
+db.version(2)
+  .stores({})
+  .upgrade((tx) =>
+    tx
+      .table('sheets')
+      .toCollection()
+      .modify((sheet: { content: SheetContent & SheetContentV1 }) => {
+        const { keyPoints, ...content } = sheet.content
+        if (!keyPoints) return
+        sheet.content = {
+          ...content,
+          summary: keyPoints.map(({ text, example }) =>
+            example ? `${text} Par exemple : ${example}` : text,
+          ),
+        }
+      }),
+  )
+
 db.on('populate', async (tx) => {
   const createdAt = new Date()
   await tx.table('subjects').bulkAdd(
@@ -98,22 +128,88 @@ db.on('populate', async (tx) => {
   )
 })
 
+/** Ce que /generate produit pour une leçon */
+export interface GeneratedContent {
+  sheet: SheetContent
+  flashcards: Pick<Card, 'front' | 'back'>[]
+  quiz: Omit<QuizQuestion, 'id' | 'lessonId'>[]
+}
+
+const contentTables = () => [db.sheets, db.cards, db.quizQuestions]
+
+/** À appeler dans une transaction qui inclut contentTables() */
+async function deleteContent(lessonIds: number[]): Promise<void> {
+  await Promise.all(
+    contentTables().map((table) => table.where('lessonId').anyOf(lessonIds).delete()),
+  )
+}
+
+/** Remplace la fiche, les cartes et les questions d'une leçon par celles générées */
+export async function saveGeneratedContent(
+  lessonId: number,
+  generated: GeneratedContent,
+): Promise<void> {
+  const due = new Date()
+  await db.transaction('rw', contentTables(), async () => {
+    await deleteContent([lessonId])
+    await db.sheets.add({ lessonId, content: generated.sheet })
+    await db.cards.bulkAdd(generated.flashcards.map((card) => ({ ...card, lessonId, due })))
+    await db.quizQuestions.bulkAdd(generated.quiz.map((question) => ({ ...question, lessonId })))
+  })
+}
+
+export interface LessonEdits {
+  title: string
+  sourceText: string
+  /** null si la fiche n'a pas encore été générée */
+  sheet: SheetContent | null
+  cards: Card[]
+  quiz: QuizQuestion[]
+}
+
+/**
+ * Enregistre les corrections d'un adulte. Les cartes et questions gardées conservent leur id
+ * (et donc leur état de révision) ; celles qui ne sont plus dans la liste sont supprimées.
+ */
+export async function saveLessonEdits(lessonId: number, edits: LessonEdits): Promise<void> {
+  const keptCards = new Set(edits.cards.map((card) => card.id))
+  const keptQuestions = new Set(edits.quiz.map((question) => question.id))
+  await db.transaction('rw', [db.lessons, ...contentTables()], async () => {
+    await db.lessons.update(lessonId, { title: edits.title, sourceText: edits.sourceText })
+    if (edits.sheet) {
+      await db.sheets.where('lessonId').equals(lessonId).modify({ content: edits.sheet })
+    }
+    await db.cards
+      .where('lessonId')
+      .equals(lessonId)
+      .filter((card) => !keptCards.has(card.id))
+      .delete()
+    await db.quizQuestions
+      .where('lessonId')
+      .equals(lessonId)
+      .filter((question) => !keptQuestions.has(question.id))
+      .delete()
+    await db.cards.bulkPut(edits.cards)
+    await db.quizQuestions.bulkPut(edits.quiz)
+  })
+}
+
+/** Supprime une leçon avec sa fiche, ses cartes et ses questions */
+export async function deleteLesson(lessonId: number): Promise<void> {
+  await db.transaction('rw', [db.lessons, ...contentTables()], async () => {
+    await deleteContent([lessonId])
+    await db.lessons.delete(lessonId)
+  })
+}
+
 /** Supprime une matière avec ses leçons, fiches, cartes et questions */
 export async function deleteSubject(subjectId: number): Promise<void> {
-  await db.transaction(
-    'rw',
-    [db.subjects, db.lessons, db.sheets, db.cards, db.quizQuestions],
-    async () => {
-      const lessonIds = await db.lessons.where('subjectId').equals(subjectId).primaryKeys()
-      await Promise.all([
-        db.sheets.where('lessonId').anyOf(lessonIds).delete(),
-        db.cards.where('lessonId').anyOf(lessonIds).delete(),
-        db.quizQuestions.where('lessonId').anyOf(lessonIds).delete(),
-      ])
-      await db.lessons.bulkDelete(lessonIds)
-      await db.subjects.delete(subjectId)
-    },
-  )
+  await db.transaction('rw', [db.subjects, db.lessons, ...contentTables()], async () => {
+    const lessonIds = await db.lessons.where('subjectId').equals(subjectId).primaryKeys()
+    await deleteContent(lessonIds)
+    await db.lessons.bulkDelete(lessonIds)
+    await db.subjects.delete(subjectId)
+  })
 }
 
 // navigator.storage n'existe qu'en contexte sécurisé (HTTPS ou localhost) : null sinon

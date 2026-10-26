@@ -67,4 +67,7 @@ npm run dev
 | `npm run typecheck`    | vérification TypeScript (app + api)                                       |
 | `npm run types -w api` | régénère les types Workers après une modification de `api/wrangler.jsonc` |
 
-Pour essayer l'extraction sur de vraies photos (API lancée) : `.\api\scripts\try-extract.ps1 photo1.jpg [photo2.jpg ...]`.
+Pour essayer l'API sur de vrais cours (API lancée) :
+
+- extraction : `.\api\scripts\try-api.ps1 -Photos photo1.jpg, photo2.jpg`
+- génération : `.\api\scripts\try-api.ps1 -TextFile cours.txt -Subject "Histoire-Géographie"`

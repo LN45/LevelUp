@@ -117,8 +117,8 @@ L'appli est construite autour de l'univers des kitsunés (renards du folklore ja
 - [x] **Étape 2 — Données locales** : base Dexie avec les entités ci-dessus, `navigator.storage.persist()`, stores Pinia, gestion des matières.
 - [x] **Étape 3 — API : socle + extraction** : compte Cloudflare, `wrangler login` et jeton d'appli (actions manuelles), module fournisseur IA (Workers AI), middleware jeton, CORS, limites de taille, quota quotidien KV ; route `POST /extract` (images → texte propre du cours via la vision du modèle).
 - [x] **Étape 4 — Capture du cours** : plusieurs photos par leçon, compression côté client (~1600 px, JPEG), import PDF (texte via pdfjs, sinon pages en images), appel à `/extract`, **écran de relecture et correction** du texte, choix de la matière, enregistrement de la leçon.
-- [ ] **Étape 5 — API : génération** : route `POST /generate` (texte → fiche + flashcards + quiz) en sortie structurée validée par Zod, prompt intégrant les contraintes dys.
-- [ ] **Étape 6 — Affichage de la fiche** : rendu lisible, lecture vocale par section, liste des leçons par matière.
+- [x] **Étape 5 — API : génération** : route `POST /generate` (texte → fiche + flashcards + quiz) en sortie structurée validée par Zod, prompt intégrant les contraintes dys.
+- [x] **Étape 6 — Affichage de la fiche** (réalisée avec l'étape 5) : rendu lisible, lecture vocale par section, liste des leçons par matière.
 - [ ] **Étape 7 — Flashcards** : retournement de carte, 🔊 recto et verso, boutons « je savais / je ne savais pas ».
 - [ ] **Étape 8 — Quiz à cocher** : QCM 3 choix et vrai/faux, 🔊 partout, feedback immédiat avec explication (flammes kitsunebi, mascotte), écran de fin encourageant.
 - [ ] **Étape 9 — Révision espacée** : intégration de ts-fsrs, écran d'accueil « À réviser aujourd'hui ».

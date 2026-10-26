@@ -6,6 +6,7 @@ import { timingSafeEqual } from 'hono/utils/buffer'
 
 import { AiError } from './ai'
 import { extract } from './extract'
+import { generate } from './generate'
 
 declare global {
   interface Env {
@@ -51,6 +52,7 @@ export const app = new Hono<AppEnv>()
     }),
   )
   .route('/extract', extract)
+  .route('/generate', generate)
   .notFound((c) => c.json({ error: 'not_found' }, 404))
   .onError((error, c) => {
     if (error instanceof HTTPException) return c.json({ error: error.message }, error.status)

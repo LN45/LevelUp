@@ -25,6 +25,7 @@ export function pickFrenchVoice(
 import { computed, onBeforeUnmount, useId } from 'vue'
 
 import { useSettingsStore } from '@/stores/settings'
+import { plainText } from '@/utils/text'
 
 const { text } = defineProps<{ text: string }>()
 
@@ -44,7 +45,7 @@ function toggle() {
   stop()
   if (wasSpeaking) return
 
-  const utterance = new SpeechSynthesisUtterance(text)
+  const utterance = new SpeechSynthesisUtterance(plainText(text))
   utterance.lang = 'fr-FR'
   utterance.rate = RATES[settingsStore.settings.speechRate]
   const voice = pickFrenchVoice(window.speechSynthesis.getVoices())

@@ -12,14 +12,15 @@ const { subjects } = storeToRefs(useSubjectsStore())
     <h1>Mes matières</h1>
 
     <ul v-if="subjects?.length" class="grid">
-      <li
-        v-for="subject in subjects"
-        :key="subject.id"
-        class="card"
-        :style="{ '--subject-color': subject.color }"
-      >
-        <span class="icon" aria-hidden="true">{{ subject.icon }}</span>
-        <span class="name">{{ subject.name }}</span>
+      <li v-for="subject in subjects" :key="subject.id">
+        <RouterLink
+          :to="{ name: 'subject', params: { id: subject.id } }"
+          class="card subject"
+          :style="{ '--subject-color': subject.color }"
+        >
+          <span class="icon" aria-hidden="true">{{ subject.icon }}</span>
+          <span class="name">{{ subject.name }}</span>
+        </RouterLink>
       </li>
     </ul>
 
@@ -44,16 +45,9 @@ h1 {
   list-style: none;
 }
 
-.card {
-  display: flex;
-  align-items: center;
-  gap: var(--space-m);
+.subject {
   min-height: 4.5rem;
-  padding: var(--space-m);
-  border: var(--border);
   border-left: 0.6rem solid var(--subject-color);
-  border-radius: var(--radius);
-  background: var(--color-surface);
 }
 .icon {
   font-size: 2rem;
