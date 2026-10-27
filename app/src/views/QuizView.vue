@@ -6,11 +6,21 @@ import { useRoute } from 'vue-router'
 import KitsuneMascot from '@/components/KitsuneMascot.vue'
 import MatchQuestion from '@/components/MatchQuestion.vue'
 import OrderQuestion from '@/components/OrderQuestion.vue'
+import ProgressBar from '@/components/ProgressBar.vue'
 import RichText from '@/components/RichText.vue'
 import SpeakButton from '@/components/SpeakButton.vue'
 import { useReviewSession } from '@/composables/useReviewSession'
-import { db, dueQuestions, recordQuizAnswer, type Lesson, type QuizQuestion } from '@/db'
+import {
+  addXp,
+  db,
+  dueQuestions,
+  recordQuizAnswer,
+  totalXp,
+  type Lesson,
+  type QuizQuestion,
+} from '@/db'
 import { useSettingsStore } from '@/stores/settings'
+import { answerXp, levelInfo, MAX_LEVEL, XP } from '@/utils/progress'
 
 const MAX_QUESTIONS = 8
 
@@ -29,20 +39,26 @@ const chosen = ref<number | null>(null)
 const result = ref<boolean | null>(null)
 /** Révision : questions encore à revoir une fois la série finie (pour « Encore une série ? ») */
 const remainingDue = ref(0)
+/** Niveau atteint pendant la série qui vient de finir (célébration), sinon null */
+const reachedLevel = ref<number | null>(null)
+const levelAtStart = ref(1)
 
 const session = useReviewSession<QuizQuestion>({ maxItems: MAX_QUESTIONS })
 const question = session.current
 
 async function load() {
-  const [found, lessonQuestions] = await Promise.all([
+  const [found, lessonQuestions, xp] = await Promise.all([
     db.lessons.get(lessonId),
     isReview
       ? dueQuestions(lessonId)
       : db.quizQuestions.where('lessonId').equals(lessonId).toArray(),
+    totalXp(),
   ])
   lesson.value = found ?? null
   questions.value = lessonQuestions
+  levelAtStart.value = levelInfo(xp).level
   resetAnswer()
+  reachedLevel.value = null
   session.start(lessonQuestions)
   loaded.value = true
 }
@@ -53,6 +69,7 @@ let saving = Promise.resolve()
 
 const answered = computed(() => result.value !== null)
 const isCorrect = computed(() => result.value === true)
+const earnedXp = computed(() => answerXp(isCorrect.value, session.isRetry.value))
 
 function resetAnswer() {
   chosen.value = null
@@ -95,9 +112,13 @@ function next() {
   // Valeurs lues tout de suite : l'enregistrement s'exécute après, une fois la réponse effacée
   const current = question.value
   const correct = isCorrect.value
+  const retry = session.isRetry.value
+  const xp = earnedXp.value
   // Seule la première réponse compte pour la révision espacée : le second passage sert à apprendre
-  if (current && !session.isRetry.value) {
-    saving = saving.then(() => recordQuizAnswer(current.id, correct))
+  if (current) {
+    saving = saving.then(() =>
+      retry ? addXp(lessonId, xp) : recordQuizAnswer(current.id, correct),
+    )
   }
   session.answer(correct)
   resetAnswer()
@@ -110,14 +131,25 @@ function restart() {
     return
   }
   resetAnswer()
+  reachedLevel.value = null
   session.start(questions.value)
 }
 
 watch(session.isDone, async (done) => {
-  if (!done || !isReview) return
+  if (!done) return
+  saving = saving.then(() => addXp(lessonId, XP.seriesDone))
   await saving
-  remainingDue.value = (await dueQuestions(lessonId)).length
+  const level = levelInfo(await totalXp()).level
+  if (level > levelAtStart.value) reachedLevel.value = level
+  levelAtStart.value = level
+  if (isReview) remainingDue.value = (await dueQuestions(lessonId)).length
 })
+
+const levelUpMessage = computed(() =>
+  reachedLevel.value === MAX_LEVEL
+    ? 'Ta neuvième queue a poussé ! Tu es un kitsuné très sage.'
+    : `Une nouvelle queue a poussé ! Tu es maintenant niveau ${reachedLevel.value}.`,
+)
 
 /** Apparence d'un choix une fois la réponse donnée : bonne réponse en doré, le reste en retrait */
 function choiceState(index: number, answer: number) {
@@ -167,12 +199,7 @@ watch([question, answered], async () => {
       <div class="progress">
         <span v-if="session.isRetry.value">On revoit une question</span>
         <span v-else>Question {{ session.step.value }} sur {{ session.itemCount.value }}</span>
-        <div class="bar" aria-hidden="true">
-          <div
-            class="bar-fill"
-            :style="{ width: `${((session.step.value - 1) / session.length.value) * 100}%` }"
-          />
-        </div>
+        <ProgressBar :value="(session.step.value - 1) / session.length.value" />
       </div>
 
       <div class="card question">
@@ -231,6 +258,7 @@ watch([question, answered], async () => {
           </span>
           <KitsuneMascot v-else class="mini-mascot" mood="encouraging" />
           <strong>{{ feedbackText }}</strong>
+          <span class="xp">+{{ earnedXp }} XP</span>
         </div>
         <div v-if="question.explanation" class="explanation">
           <p><RichText :text="question.explanation" /></p>
@@ -243,7 +271,17 @@ watch([question, answered], async () => {
     </div>
 
     <div v-else-if="session.isDone.value" class="end">
-      <KitsuneMascot class="mascot" mood="proud" />
+      <!-- Niveau de départ tant que la fin de série n'est pas enregistrée : la queue pousse ensuite -->
+      <KitsuneMascot
+        class="mascot"
+        mood="proud"
+        :tails="reachedLevel ?? levelAtStart"
+        :grow-tail="reachedLevel !== null"
+      />
+      <div v-if="reachedLevel" class="bubble bubble--level-up" role="status">
+        <p>🎉 {{ levelUpMessage }}</p>
+        <SpeakButton :text="levelUpMessage" />
+      </div>
       <div class="bubble" role="status">
         <p>{{ endMessage }}</p>
         <SpeakButton :text="endMessage" />
@@ -293,18 +331,6 @@ watch([question, answered], async () => {
   flex-direction: column;
   gap: var(--space-xs);
   font-weight: 700;
-}
-.bar {
-  height: 0.75rem;
-  overflow: hidden;
-  border: 2px solid var(--color-ink);
-  border-radius: var(--radius);
-  background: var(--color-surface);
-}
-.bar-fill {
-  height: 100%;
-  background: var(--color-gold);
-  transition: width 0.3s ease;
 }
 
 .question {
@@ -389,6 +415,12 @@ watch([question, answered], async () => {
   gap: var(--space-s);
   font-size: 1.1rem;
 }
+.xp {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--color-fox-dark);
+  font-weight: 700;
+}
 .mini-mascot {
   width: 3.5rem;
   flex-shrink: 0;
@@ -442,6 +474,10 @@ watch([question, answered], async () => {
   flex: 1;
   margin: 0;
   font-weight: 700;
+}
+.bubble--level-up {
+  border-width: 4px;
+  border-color: var(--color-gold);
 }
 
 @keyframes flicker {

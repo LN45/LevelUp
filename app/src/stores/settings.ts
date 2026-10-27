@@ -46,10 +46,12 @@ export function parseSettings(raw: string | null): Settings {
   } catch {
     // stockage corrompu : on repart des valeurs par défaut
   }
-  const data = (typeof parsed === 'object' && parsed !== null ? parsed : {}) as Record<
-    string,
-    unknown
-  >
+  return normalizeSettings(parsed)
+}
+
+/** Réglages valides à partir de n'importe quelle valeur (stockage, sauvegarde importée) */
+export function normalizeSettings(value: unknown): Settings {
+  const data = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>
 
   return {
     font: pick(data.font, FONTS, DEFAULT_SETTINGS.font),

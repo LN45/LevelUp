@@ -2,8 +2,10 @@
 import { useRoute } from 'vue-router'
 
 import KitsuneMascot from '@/components/KitsuneMascot.vue'
+import ProgressBar from '@/components/ProgressBar.vue'
 import { useLiveQuery } from '@/composables/useLiveQuery'
 import { db } from '@/db'
+import { progressByLesson, progressText } from '@/utils/progress'
 import { formatDate } from '@/utils/text'
 
 const subjectId = Number(useRoute().params.id)
@@ -16,11 +18,21 @@ async function loadSubject() {
     .equals(subjectId)
     .reverse()
     .sortBy('createdAt')
-  const sheets = await db.sheets
-    .where('lessonId')
-    .anyOf(lessons.map((lesson) => lesson.id))
-    .toArray()
-  return { subject, lessons, ready: new Set(sheets.map((sheet) => sheet.lessonId)) }
+  const lessonIds = lessons.map((lesson) => lesson.id)
+  const [sheets, questions] = await Promise.all([
+    db.sheets.where('lessonId').anyOf(lessonIds).toArray(),
+    db.quizQuestions.where('lessonId').anyOf(lessonIds).toArray(),
+  ])
+  const ready = new Set(sheets.map((sheet) => sheet.lessonId))
+  const progress = progressByLesson(questions)
+  return {
+    subject,
+    lessons: lessons.map((lesson) => ({
+      lesson,
+      ready: ready.has(lesson.id),
+      progress: progress.get(lesson.id),
+    })),
+  }
 }
 
 // undefined : chargement ; null : matière introuvable
@@ -45,13 +57,17 @@ const data = useLiveQuery(
     </RouterLink>
 
     <ul v-if="data.lessons.length" class="lessons">
-      <li v-for="lesson in data.lessons" :key="lesson.id">
+      <li v-for="{ lesson, ready, progress } in data.lessons" :key="lesson.id">
         <RouterLink :to="{ name: 'lesson', params: { id: lesson.id } }" class="card lesson">
           <span class="lesson-text">
             <span class="lesson-title">{{ lesson.title }}</span>
             <span class="lesson-meta">
               {{ formatDate(lesson.createdAt) }} ·
-              {{ data.ready.has(lesson.id) ? 'fiche prête' : 'fiche en préparation' }}
+              {{ ready ? 'fiche prête' : 'fiche en préparation' }}
+            </span>
+            <span v-if="progress" class="lesson-progress">
+              <ProgressBar :value="progress.succeeded / progress.total" />
+              <span class="lesson-meta">{{ progressText(progress) }}</span>
             </span>
           </span>
           <span aria-hidden="true">›</span>
@@ -109,6 +125,12 @@ h1 {
 .lesson-meta {
   color: var(--color-ink-soft);
   font-size: 0.85rem;
+}
+.lesson-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
 }
 
 .empty {

@@ -123,7 +123,7 @@ L'appli est construite autour de l'univers des kitsunés (renards du folklore ja
 - [x] **Étape 8 — Quiz à cocher** : QCM 3 choix et vrai/faux, 🔊 partout, feedback immédiat avec explication (flammes kitsunebi, mascotte), écran de fin encourageant.
 - [x] **Étape 9 — Révision espacée** : intégration de ts-fsrs sur les questions du quiz (une question ratée revient plus tôt), écran d'accueil « À réviser aujourd'hui ». Une série ne mélange **jamais** les matières ni les leçons : l'accueil présente une ligne par leçon, regroupées par matière.
 - [x] **Étape 10 — Formats de quiz supplémentaires** : relier par paires, remettre dans l'ordre (sans saisie).
-- [ ] **Étape 11 — Suivi et sauvegarde** : expérience et niveaux (queues du kitsuné, jusqu'à 9) avec célébration de montée de niveau, progression par matière, export/import JSON de toutes les données.
+- [x] **Étape 11 — Suivi et sauvegarde** : expérience et niveaux (queues du kitsuné, jusqu'à 9) avec célébration de montée de niveau, progression par leçon (questions réussies à la dernière réponse), export/import JSON de toutes les données.
 - [ ] **Étape 12 — PWA et déploiement** : manifest, icônes, hors-ligne, invitation à installer ; déploiement front sur GitHub Pages via GitHub Actions (permissions minimales, actions épinglées par SHA, `npm ci`), API via `wrangler deploy`, secrets de production, CORS limité à l'URL GitHub Pages ; vérification finale de la checklist sécurité. L'installation PWA et le hors-ligne exigent HTTPS : les tester sur la version GitHub Pages (ou via un tunnel HTTPS gratuit type `cloudflared tunnel`), pas sur l'IP locale.
 
 Plus tard (hors périmètre actuel) : interrogation orale avec réponses à la voix.

@@ -3,11 +3,13 @@ import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import KitsuneMascot from '@/components/KitsuneMascot.vue'
+import ProgressBar from '@/components/ProgressBar.vue'
 import RichText from '@/components/RichText.vue'
 import SpeakButton from '@/components/SpeakButton.vue'
 import { useLiveQuery } from '@/composables/useLiveQuery'
 import { db } from '@/db'
 import { useLessonsStore } from '@/stores/lessons'
+import { progressByLesson, progressText } from '@/utils/progress'
 import { courseLines } from '@/utils/text'
 
 const lessonId = Number(useRoute().params.id)
@@ -19,12 +21,12 @@ const justSaved = history.state?.justSaved === true
 async function loadLesson() {
   const lesson = await db.lessons.get(lessonId)
   if (!lesson) return null
-  const [subject, sheet, questionCount] = await Promise.all([
+  const [subject, sheet, questions] = await Promise.all([
     db.subjects.get(lesson.subjectId),
     db.sheets.where('lessonId').equals(lessonId).first(),
-    db.quizQuestions.where('lessonId').equals(lessonId).count(),
+    db.quizQuestions.where('lessonId').equals(lessonId).toArray(),
   ])
-  return { lesson, subject, sheet, questionCount }
+  return { lesson, subject, sheet, progress: progressByLesson(questions).get(lessonId) }
 }
 
 // undefined : chargement ; null : leçon introuvable
@@ -122,13 +124,16 @@ const lines = computed(() => courseLines(data.value?.lesson.sourceText ?? ''))
 
       <div class="practice">
         <h2>Pour t’entraîner</h2>
-        <RouterLink
-          v-if="data.questionCount"
-          :to="{ name: 'quiz', params: { id: data.lesson.id } }"
-          class="btn btn--primary practice-action"
-        >
-          ❓ Faire le quiz ({{ data.questionCount }} questions)
-        </RouterLink>
+        <template v-if="data.progress">
+          <ProgressBar :value="data.progress.succeeded / data.progress.total" />
+          <p class="progress-text">{{ progressText(data.progress) }}</p>
+          <RouterLink
+            :to="{ name: 'quiz', params: { id: data.lesson.id } }"
+            class="btn btn--primary practice-action"
+          >
+            ❓ Faire le quiz ({{ data.progress.total }} questions)
+          </RouterLink>
+        </template>
       </div>
     </template>
 
@@ -232,6 +237,10 @@ h3 {
   flex-direction: column;
   gap: var(--space-s);
   margin-top: var(--space-m);
+}
+.progress-text {
+  margin: 0;
+  color: var(--color-ink-soft);
 }
 .practice-action {
   min-height: 3.5rem;

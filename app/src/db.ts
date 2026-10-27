@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable, type Table } from 'dexie'
 
+import { answerXp, XP } from './utils/progress'
 import { endOfDay, newReviewState, rateAnswer, type ReviewState } from './utils/review'
 
 export interface Subject {
@@ -43,6 +44,8 @@ interface QuizQuestionBase {
   review: ReviewState
   /** Copie de review.due, indexée pour trouver les questions à revoir */
   due: Date
+  /** Résultat de la dernière réponse (premier passage d'une série) ; absent si jamais répondue */
+  lastCorrect?: boolean
 }
 
 export type ChoiceQuestion = QuizQuestionBase & {
@@ -65,6 +68,15 @@ export type OrderQuestion = QuizQuestionBase & {
 }
 
 export type QuizQuestion = ChoiceQuestion | MatchQuestion | OrderQuestion
+
+/** XP gagnée ; gardée même si la leçon ou la matière est supprimée (jamais de queue perdue) */
+export interface XpEntry {
+  id: number
+  date: Date
+  amount: number
+  subjectId: number
+  lessonId: number
+}
 
 /** Omit appliqué à chaque format de question séparément */
 type OmitEach<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
@@ -99,6 +111,7 @@ export const db = new Dexie('levelup') as Dexie & {
   sheets: EntityTable<Sheet, 'id'>
   // Type d'insertion explicite : EntityTable fusionnerait les formats de question en un seul
   quizQuestions: Table<QuizQuestion, number, OmitEach<QuizQuestion, 'id'>>
+  xp: EntityTable<XpEntry, 'id'>
 }
 
 // ++id plutôt que des UUID : crypto.randomUUID() n'existe pas en HTTP via l'IP locale
@@ -151,6 +164,28 @@ db.version(4)
       }),
   )
 
+// Version 5 : expérience. Les réponses déjà enregistrées comptent comme réussies du premier coup.
+db.version(5)
+  .stores({ xp: '++id, subjectId' })
+  .upgrade(async (tx) => {
+    const lessons: Lesson[] = await tx.table('lessons').toArray()
+    const questions: QuizQuestion[] = await tx.table('quizQuestions').toArray()
+    const date = new Date()
+    const entries = lessons
+      .map((lesson) => ({
+        date,
+        lessonId: lesson.id,
+        subjectId: lesson.subjectId,
+        amount:
+          XP.firstTry *
+          questions
+            .filter((question) => question.lessonId === lesson.id)
+            .reduce((sum, question) => sum + (question.review?.reps ?? 0), 0),
+      }))
+      .filter((entry) => entry.amount > 0)
+    await tx.table('xp').bulkAdd(entries)
+  })
+
 db.on('populate', async (tx) => {
   const createdAt = new Date()
   await tx.table('subjects').bulkAdd(
@@ -166,7 +201,7 @@ db.on('populate', async (tx) => {
 /** Ce que /generate produit pour une leçon */
 export interface GeneratedContent {
   sheet: SheetContent
-  quiz: OmitEach<QuizQuestion, 'id' | 'lessonId' | 'review' | 'due'>[]
+  quiz: OmitEach<QuizQuestion, 'id' | 'lessonId' | 'review' | 'due' | 'lastCorrect'>[]
 }
 
 const contentTables = () => [db.sheets, db.quizQuestions]
@@ -205,18 +240,36 @@ export function dueQuestions(lessonId: number, now = new Date()): Promise<QuizQu
     .toArray()
 }
 
-/** Enregistre la première réponse d'une série et planifie la prochaine révision */
+/** À appeler dans une transaction qui inclut db.lessons et db.xp */
+async function addXpEntry(lessonId: number, amount: number, date: Date): Promise<void> {
+  const lesson = await db.lessons.get(lessonId)
+  if (lesson) await db.xp.add({ date, amount, lessonId, subjectId: lesson.subjectId })
+}
+
+/** XP sans réponse à enregistrer (second passage, fin de série) */
+export async function addXp(lessonId: number, amount: number, now = new Date()): Promise<void> {
+  await db.transaction('rw', db.lessons, db.xp, () => addXpEntry(lessonId, amount, now))
+}
+
+/** Enregistre la première réponse d'une série, planifie la prochaine révision et donne l'XP */
 export async function recordQuizAnswer(
   questionId: number,
   correct: boolean,
   now = new Date(),
 ): Promise<void> {
-  await db.transaction('rw', db.quizQuestions, async () => {
+  await db.transaction('rw', [db.quizQuestions, db.lessons, db.xp], async () => {
     const question = await db.quizQuestions.get(questionId)
     if (!question) return
     const review = rateAnswer(question.review, correct, now)
-    await db.quizQuestions.update(questionId, { review, due: review.due })
+    await db.quizQuestions.update(questionId, { review, due: review.due, lastCorrect: correct })
+    await addXpEntry(question.lessonId, answerXp(correct, false), now)
   })
+}
+
+export async function totalXp(): Promise<number> {
+  let total = 0
+  await db.xp.each((entry) => (total += entry.amount))
+  return total
 }
 
 export interface LessonEdits {

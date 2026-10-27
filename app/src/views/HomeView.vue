@@ -3,13 +3,22 @@ import { storeToRefs } from 'pinia'
 import { computed, ref } from 'vue'
 
 import KitsuneMascot from '@/components/KitsuneMascot.vue'
+import ProgressBar from '@/components/ProgressBar.vue'
 import SpeakButton from '@/components/SpeakButton.vue'
 import { useLiveQuery } from '@/composables/useLiveQuery'
 import { db } from '@/db'
+import { useProgressStore } from '@/stores/progress'
 import { NICKNAME_MAX_LENGTH, useSettingsStore } from '@/stores/settings'
 import { endOfDay, groupDueByLesson, type DueGroup } from '@/utils/review'
 
 const { settings } = storeToRefs(useSettingsStore())
+const { xp, level } = storeToRefs(useProgressStore())
+
+const levelText = computed(() =>
+  level.value.toNext === null
+    ? '9 queues : tu es un kitsuné très sage !'
+    : `Encore ${level.value.toNext} XP pour la prochaine queue`,
+)
 
 /** « À réviser aujourd'hui » : par matière puis par leçon, jamais mélangées */
 const dueGroups = useLiveQuery(
@@ -65,6 +74,12 @@ function saveNickname(nickname: string) {
     </form>
 
     <template v-else>
+      <div v-if="xp !== undefined" class="level">
+        <strong>Niveau {{ level.level }}</strong>
+        <ProgressBar :value="level.progress" />
+        <span class="level-text">{{ levelText }}</span>
+      </div>
+
       <RouterLink to="/lessons/new" class="btn btn--primary main-action">
         📷 Ajouter un cours
       </RouterLink>
@@ -128,6 +143,15 @@ function saveNickname(nickname: string) {
   flex: 1;
   margin: 0;
   font-weight: 700;
+}
+
+.level {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.level-text {
+  color: var(--color-ink-soft);
 }
 
 .welcome {

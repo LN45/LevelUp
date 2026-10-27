@@ -1,13 +1,24 @@
 <script setup lang="ts">
 import { computed, useId } from 'vue'
 
+import { useProgressStore } from '@/stores/progress'
+import { MAX_LEVEL } from '@/utils/progress'
+
 export type MascotMood = 'happy' | 'encouraging' | 'thinking' | 'proud'
 
-const { mood = 'happy', tails = 1 } = defineProps<{
+const {
+  mood = 'happy',
+  tails,
+  growTail = false,
+} = defineProps<{
   mood?: MascotMood
-  /** 1 à 9, suit le niveau de l'élève */
+  /** 1 à 9 ; par défaut, le niveau de l'élève */
   tails?: number
+  /** Fait pousser la dernière queue (montée de niveau) */
+  growTail?: boolean
 }>()
+
+const progress = useProgressStore()
 
 const moodLabels: Record<MascotMood, string> = {
   happy: 'content',
@@ -56,7 +67,7 @@ const clipId = `${uid}-clip`
 
 // Les queues s'ouvrent en éventail autour du bas du corps
 const tailAngles = computed(() => {
-  const count = Math.min(9, Math.max(1, Math.round(tails)))
+  const count = Math.min(MAX_LEVEL, Math.max(1, Math.round(tails ?? progress.level.level)))
   if (count === 1) return [55]
   const spread = Math.min(62, 20 + count * 5)
   return Array.from({ length: count }, (_, i) => -spread + (2 * spread * i) / (count - 1))
@@ -84,13 +95,15 @@ const pupilShift = computed(() => (mood === 'thinking' ? { x: 3, y: -2 } : { x: 
 
     <g class="tails">
       <g
-        v-for="angle in tailAngles"
+        v-for="(angle, index) in tailAngles"
         :key="angle"
         :transform="`translate(100 170) rotate(${angle}) scale(1.1)`"
       >
-        <use :href="`#${tailId}`" class="fur" />
-        <circle cx="-4" cy="-88" r="22" class="fur-light" :clip-path="`url(#${clipId})`" />
-        <use :href="`#${tailId}`" class="outline contour" />
+        <g :class="{ 'tail-new': growTail && index === tailAngles.length - 1 }">
+          <use :href="`#${tailId}`" class="fur" />
+          <circle cx="-4" cy="-88" r="22" class="fur-light" :clip-path="`url(#${clipId})`" />
+          <use :href="`#${tailId}`" class="outline contour" />
+        </g>
       </g>
     </g>
 
@@ -283,6 +296,12 @@ const pupilShift = computed(() => (mood === 'thinking' ? { x: 3, y: -2 } : { x: 
   transform-origin: 50% 100%;
   animation: flicker 1.2s ease-in-out infinite alternate;
 }
+/* La nouvelle queue pousse depuis sa base (origine du repère de la queue) */
+.tail-new {
+  transform-box: view-box;
+  transform-origin: 0 0;
+  animation: grow 1.2s ease-out 0.3s both;
+}
 
 @keyframes sway {
   from {
@@ -290,6 +309,17 @@ const pupilShift = computed(() => (mood === 'thinking' ? { x: 3, y: -2 } : { x: 
   }
   to {
     transform: rotate(3deg);
+  }
+}
+@keyframes grow {
+  from {
+    transform: scale(0);
+  }
+  70% {
+    transform: scale(1.12);
+  }
+  to {
+    transform: scale(1);
   }
 }
 @keyframes flicker {
