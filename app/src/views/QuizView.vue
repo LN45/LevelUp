@@ -4,6 +4,8 @@ import { computed, nextTick, ref, useTemplateRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import KitsuneMascot from '@/components/KitsuneMascot.vue'
+import MatchQuestion from '@/components/MatchQuestion.vue'
+import OrderQuestion from '@/components/OrderQuestion.vue'
 import RichText from '@/components/RichText.vue'
 import SpeakButton from '@/components/SpeakButton.vue'
 import { useReviewSession } from '@/composables/useReviewSession'
@@ -21,8 +23,10 @@ const { settings } = storeToRefs(useSettingsStore())
 const lesson = ref<Lesson | null>(null)
 const questions = ref<QuizQuestion[]>([])
 const loaded = ref(false)
-/** Index du choix touché pour la question affichée, null tant qu'on n'a pas répondu */
+/** QCM et vrai/faux : index du choix touché */
 const chosen = ref<number | null>(null)
+/** Résultat de la question affichée, null tant qu'on n'a pas répondu (ou pas vérifié) */
+const result = ref<boolean | null>(null)
 /** Révision : questions encore à revoir une fois la série finie (pour « Encore une série ? ») */
 const remainingDue = ref(0)
 
@@ -38,7 +42,7 @@ async function load() {
   ])
   lesson.value = found ?? null
   questions.value = lessonQuestions
-  chosen.value = null
+  resetAnswer()
   session.start(lessonQuestions)
   loaded.value = true
 }
@@ -47,8 +51,19 @@ void load()
 // Enregistrements en cours, attendus avant de compter ce qu'il reste à réviser
 let saving = Promise.resolve()
 
-const answered = computed(() => chosen.value !== null)
-const isCorrect = computed(() => chosen.value === question.value?.answer)
+const answered = computed(() => result.value !== null)
+const isCorrect = computed(() => result.value === true)
+
+function resetAnswer() {
+  chosen.value = null
+  result.value = null
+}
+
+const QUESTION_LABELS: Partial<Record<QuizQuestion['type'], string>> = {
+  'true-false': 'Vrai ou faux ?',
+  match: '🔗 Relier',
+  order: '🔢 Remettre dans l’ordre',
+}
 
 /** Texte lu à voix haute pour la question */
 const questionSpeech = computed(() => {
@@ -59,13 +74,21 @@ const questionSpeech = computed(() => {
 
 const feedbackText = computed(() => {
   if (isCorrect.value) return 'Bravo !'
+  const correction =
+    question.value?.type === 'match' || question.value?.type === 'order'
+      ? 'Regarde la correction. '
+      : ''
   return session.isRetry.value
-    ? 'Pas grave ! Tu la reverras une autre fois.'
-    : 'Pas grave ! Cette question reviendra à la fin.'
+    ? `Pas grave ! ${correction}Tu la reverras une autre fois.`
+    : `Pas grave ! ${correction}Cette question reviendra à la fin.`
 })
 
+/** QCM et vrai/faux : la réponse est donnée dès qu'on touche un choix */
 function choose(index: number) {
-  if (!answered.value) chosen.value = index
+  const q = question.value
+  if (answered.value || !q || !('choices' in q)) return
+  chosen.value = index
+  result.value = index === q.answer
 }
 
 function next() {
@@ -77,7 +100,7 @@ function next() {
     saving = saving.then(() => recordQuizAnswer(current.id, correct))
   }
   session.answer(correct)
-  chosen.value = null
+  resetAnswer()
 }
 
 function restart() {
@@ -86,7 +109,7 @@ function restart() {
     void load()
     return
   }
-  chosen.value = null
+  resetAnswer()
   session.start(questions.value)
 }
 
@@ -97,9 +120,9 @@ watch(session.isDone, async (done) => {
 })
 
 /** Apparence d'un choix une fois la réponse donnée : bonne réponse en doré, le reste en retrait */
-function choiceState(index: number) {
+function choiceState(index: number, answer: number) {
   if (!answered.value) return ''
-  if (index === question.value?.answer) return 'choice--correct'
+  if (index === answer) return 'choice--correct'
   return index === chosen.value ? 'choice--wrong' : 'choice--other'
 }
 
@@ -153,17 +176,29 @@ watch([question, answered], async () => {
       </div>
 
       <div class="card question">
-        <span v-if="question.type === 'true-false'" class="question-label">Vrai ou faux ?</span>
+        <span v-if="QUESTION_LABELS[question.type]" class="question-label">
+          {{ QUESTION_LABELS[question.type] }}
+        </span>
         <p class="question-text"><RichText :text="question.question" /></p>
         <SpeakButton ref="question-speak" :text="questionSpeech" />
       </div>
 
-      <ul class="choices" :class="{ 'choices--true-false': question.type === 'true-false' }">
+      <MatchQuestion
+        v-if="question.type === 'match'"
+        :pairs="question.pairs"
+        @answered="result = $event"
+      />
+      <OrderQuestion
+        v-else-if="question.type === 'order'"
+        :items="question.items"
+        @answered="result = $event"
+      />
+      <ul v-else class="choices" :class="{ 'choices--true-false': question.type === 'true-false' }">
         <li v-for="(choice, index) in question.choices" :key="index" class="choice-row">
           <button
             type="button"
             class="btn choice"
-            :class="choiceState(index)"
+            :class="choiceState(index, question.answer)"
             :aria-disabled="answered"
             @click="choose(index)"
           >
@@ -197,7 +232,7 @@ watch([question, answered], async () => {
           <KitsuneMascot v-else class="mini-mascot" mood="encouraging" />
           <strong>{{ feedbackText }}</strong>
         </div>
-        <div class="explanation">
+        <div v-if="question.explanation" class="explanation">
           <p><RichText :text="question.explanation" /></p>
           <SpeakButton ref="explanation-speak" :text="question.explanation" />
         </div>

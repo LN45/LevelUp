@@ -3,7 +3,7 @@ import { computed, ref, toRaw, useTemplateRef } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import { db, saveLessonEdits, type LessonEdits } from '@/db'
+import { db, saveLessonEdits, type LessonEdits, type QuizQuestion } from '@/db'
 import { LESSON_TITLE_MAX_LENGTH, useLessonsStore } from '@/stores/lessons'
 
 const lessonId = Number(useRoute().params.id)
@@ -56,9 +56,37 @@ const isValid = computed(() => {
     filled(d.title, d.sourceText) &&
     (d.sheet ? d.sheet.summary.some((sentence) => filled(sentence)) : true) &&
     (d.sheet?.definitions.every((item) => filled(item.term, item.definition)) ?? true) &&
-    d.quiz.every((question) => filled(question.question, question.explanation, ...question.choices))
+    d.quiz.every(isQuestionValid)
   )
 })
+
+/** Champs obligatoires selon le format ; « relier » et « ordre » gardent au moins 2 éléments */
+function isQuestionValid(question: QuizQuestion): boolean {
+  switch (question.type) {
+    case 'match':
+      return (
+        question.pairs.length >= 2 &&
+        filled(question.question, ...question.pairs.flatMap((pair) => [pair.left, pair.right]))
+      )
+    case 'order':
+      return question.items.length >= 2 && filled(question.question, ...question.items)
+    default:
+      return filled(question.question, question.explanation, ...question.choices)
+  }
+}
+
+const QUESTION_TYPES: Record<QuizQuestion['type'], string> = {
+  mcq: 'QCM',
+  'true-false': 'vrai ou faux',
+  match: 'relier',
+  order: 'remettre dans l’ordre',
+}
+
+/** Déplace un élément d'une liste (étapes de « remettre dans l'ordre ») */
+function move<T>(list: T[], index: number, offset: -1 | 1) {
+  const [item] = list.splice(index, 1)
+  if (item !== undefined) list.splice(index + offset, 0, item)
+}
 
 /** Copie nettoyée (sans espaces superflus ni objets réactifs) prête pour la base */
 function cleanEdits(d: LessonEdits): LessonEdits {
@@ -74,12 +102,23 @@ function cleanEdits(d: LessonEdits): LessonEdits {
       })),
     },
     // toRaw : l'état de révision (objet imbriqué) ne doit pas être un proxy Vue pour IndexedDB
-    quiz: d.quiz.map((question) => ({
-      ...toRaw(question),
-      question: trim(question.question),
-      explanation: trim(question.explanation),
-      choices: question.choices.map(trim),
-    })),
+    quiz: d.quiz.map((question) => cleanQuestion(toRaw(question), trim)),
+  }
+}
+
+function cleanQuestion(question: QuizQuestion, trim: (text: string) => string): QuizQuestion {
+  const texts = { question: trim(question.question), explanation: trim(question.explanation) }
+  switch (question.type) {
+    case 'match':
+      return {
+        ...question,
+        ...texts,
+        pairs: question.pairs.map(({ left, right }) => ({ left: trim(left), right: trim(right) })),
+      }
+    case 'order':
+      return { ...question, ...texts, items: question.items.map(trim) }
+    default:
+      return { ...question, ...texts, choices: question.choices.map(trim) }
   }
 }
 
@@ -200,9 +239,7 @@ onBeforeRouteLeave(async () => !isDirty.value || ((await leaveDialog.value?.open
       <h2>Quiz</h2>
       <div v-for="(question, index) in draft.quiz" :key="question.id" class="card item">
         <div class="item-header">
-          <strong>
-            Question {{ index + 1 }} ({{ question.type === 'mcq' ? 'QCM' : 'vrai ou faux' }})
-          </strong>
+          <strong>Question {{ index + 1 }} ({{ QUESTION_TYPES[question.type] }})</strong>
           <button
             type="button"
             class="btn remove"
@@ -218,7 +255,65 @@ onBeforeRouteLeave(async () => !isDirty.value || ((await leaveDialog.value?.open
           rows="2"
           :aria-label="`Texte de la question ${index + 1}`"
         />
-        <fieldset class="choices">
+        <fieldset v-if="question.type === 'match'" class="choices">
+          <legend class="small-label">Paires (mot et définition)</legend>
+          <div v-for="(pair, pairIndex) in question.pairs" :key="pairIndex" class="pair">
+            <div class="choice">
+              <input
+                v-model="pair.left"
+                class="text-input term"
+                :aria-label="`Mot ${pairIndex + 1}`"
+                autocomplete="off"
+              />
+              <button
+                v-if="question.pairs.length > 2"
+                type="button"
+                class="btn remove"
+                :aria-label="`Supprimer la paire ${pairIndex + 1}`"
+                @click="question.pairs.splice(pairIndex, 1)"
+              >
+                🗑️
+              </button>
+            </div>
+            <textarea
+              v-model="pair.right"
+              class="text-input"
+              rows="2"
+              :aria-label="`Définition ${pairIndex + 1}`"
+            />
+          </div>
+        </fieldset>
+        <fieldset v-else-if="question.type === 'order'" class="choices">
+          <legend class="small-label">Étapes, dans le bon ordre</legend>
+          <div v-for="(_, itemIndex) in question.items" :key="itemIndex" class="choice">
+            <strong>{{ itemIndex + 1 }}.</strong>
+            <input
+              v-model="question.items[itemIndex]"
+              class="text-input"
+              :aria-label="`Étape ${itemIndex + 1}`"
+              autocomplete="off"
+            />
+            <button
+              type="button"
+              class="btn remove"
+              :disabled="itemIndex === 0"
+              :aria-label="`Monter l’étape ${itemIndex + 1}`"
+              @click="move(question.items, itemIndex, -1)"
+            >
+              ↑
+            </button>
+            <button
+              v-if="question.items.length > 2"
+              type="button"
+              class="btn remove"
+              :aria-label="`Supprimer l’étape ${itemIndex + 1}`"
+              @click="question.items.splice(itemIndex, 1)"
+            >
+              🗑️
+            </button>
+          </div>
+        </fieldset>
+        <fieldset v-else class="choices">
           <legend class="small-label">Choix (touche le rond de la bonne réponse)</legend>
           <div v-for="(_, choiceIndex) in question.choices" :key="choiceIndex" class="choice">
             <input
@@ -239,7 +334,11 @@ onBeforeRouteLeave(async () => !isDirty.value || ((await leaveDialog.value?.open
             <span v-else>{{ question.choices[choiceIndex] }}</span>
           </div>
         </fieldset>
-        <label class="small-label" :for="`explanation-${question.id}`">Explication</label>
+        <label class="small-label" :for="`explanation-${question.id}`">
+          Explication{{
+            question.type === 'match' || question.type === 'order' ? ' (facultative)' : ''
+          }}
+        </label>
         <textarea
           :id="`explanation-${question.id}`"
           v-model="question.explanation"
@@ -355,6 +454,13 @@ textarea {
   display: flex;
   align-items: center;
   gap: var(--space-s);
+}
+.pair {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-bottom: var(--space-s);
+  border-bottom: 1px dashed var(--color-ink-soft);
 }
 .answer {
   flex-shrink: 0;

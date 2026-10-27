@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { isGrounded, isTautology, normalize, normalizeQuestion, shuffleChoices } from './generate'
+import {
+  buildMatchQuestion,
+  buildOrderQuestion,
+  isGrounded,
+  isTautology,
+  normalize,
+  normalizeQuestion,
+  shuffleChoices,
+  type ChoiceQuestion,
+} from './generate'
 import { app } from './index'
 
 const TOKEN = 'jeton-de-test'
@@ -182,6 +191,7 @@ const GENERATED = {
     },
   ],
   quiz: [mcq('Que crache un volcan ?'), mcq('Q2'), trueFalse()],
+  sequence: { question: '', steps: [], explanation: '' },
 }
 
 const generateRequest = (body: unknown = COURSE) => post(body, TOKEN, '/generate')
@@ -195,10 +205,10 @@ describe('POST /generate', () => {
 
     expect(body.sheet.summary).toEqual(['Un **volcan** crache de la lave.', 'B', 'C'])
     // La bonne réponse suit le mélange des choix
-    const first = body.quiz[0]
-    expect(first?.choices[first.answer]).toBe('La lave')
+    const first = body.quiz[0] as ChoiceQuestion
+    expect(first.choices[first.answer]).toBe('La lave')
     // Vrai/faux : l'affirmation montrée correspond à la réponse attendue
-    const tf = body.quiz[2]
+    const tf = body.quiz[2] as ChoiceQuestion
     expect(tf?.choices).toEqual(['Vrai', 'Faux'])
     expect(tf?.question).toBe(tf?.answer === 0 ? TRUE_STATEMENT : FALSE_STATEMENT)
 
@@ -277,12 +287,66 @@ describe('nettoyage de la sortie de l’IA', () => {
         definitions: many({ source: SOURCE, term: 'Mot', definition: 'Sens' }),
         // Questions distinctes : les doublons seraient retirés
         quiz: Array.from({ length: 12 }, (_, i) => mcq(`Question ${i}`)),
+        sequence: GENERATED.sequence,
       },
       COURSE.text,
     )
     expect(result.sheet.summary).toHaveLength(6)
     expect(result.sheet.definitions).toHaveLength(6)
-    expect(result.quiz).toHaveLength(8)
+    expect(result.quiz.filter((q) => q.type === 'mcq')).toHaveLength(8)
+    // + « relier », construit depuis les mots à retenir (4 paires au maximum)
+    const match = result.quiz.find((q) => q.type === 'match')
+    expect(match?.type === 'match' && match.pairs).toHaveLength(4)
+  })
+
+  it('construit « relier » seulement avec au moins 3 mots à retenir', () => {
+    const definition = (term: string) => ({ term, definition: `Sens de ${term}` })
+    expect(buildMatchQuestion([definition('A'), definition('B')])).toBeNull()
+    expect(buildMatchQuestion([definition('A'), definition('B'), definition('C')])).toEqual({
+      type: 'match',
+      question: 'Relie chaque mot à sa définition.',
+      pairs: [
+        { left: 'A', right: 'Sens de A' },
+        { left: 'B', right: 'Sens de B' },
+        { left: 'C', right: 'Sens de C' },
+      ],
+      explanation: '',
+    })
+  })
+
+  it('construit « remettre dans l’ordre » seulement avec des étapes citées, dans l’ordre du cours', () => {
+    const course =
+      'Le magma monte dans la cheminée. Il arrive dans le cratère. La lave coule sur les pentes. Elle refroidit et devient de la roche.'
+    const step = (source: string, text: string) => ({ source, step: text })
+    const steps = [
+      step('Le magma monte dans la cheminée.', 'Le magma monte'),
+      step('Il arrive dans le cratère.', 'Il arrive au cratère'),
+      step('La lave coule sur les pentes.', 'La lave coule'),
+    ]
+    const sequence = (s: typeof steps) => ({
+      question: ' Remets dans l’ordre. ',
+      steps: s,
+      explanation: 'Ordre.',
+    })
+
+    expect(buildOrderQuestion(sequence(steps), course)).toEqual({
+      type: 'order',
+      question: 'Remets dans l’ordre.',
+      items: ['Le magma monte', 'Il arrive au cratère', 'La lave coule'],
+      explanation: 'Ordre.',
+    })
+    // Pas de suite dans le cours, ou trop courte
+    expect(buildOrderQuestion(sequence([]), course)).toBeNull()
+    expect(buildOrderQuestion(sequence(steps.slice(0, 2)), course)).toBeNull()
+    // Une étape inventée
+    expect(
+      buildOrderQuestion(
+        sequence([...steps.slice(0, 2), step('Le volcan s’envole.', 'Il s’envole')]),
+        course,
+      ),
+    ).toBeNull()
+    // Ordre différent de celui du cours : on ne fait pas confiance à l'IA
+    expect(buildOrderQuestion(sequence([steps[1]!, steps[0]!, steps[2]!]), course)).toBeNull()
   })
 
   it('reconnaît une citation du cours malgré accents, ponctuation et Markdown', () => {

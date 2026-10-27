@@ -1,4 +1,4 @@
-import Dexie, { type EntityTable } from 'dexie'
+import Dexie, { type EntityTable, type Table } from 'dexie'
 
 import { endOfDay, newReviewState, rateAnswer, type ReviewState } from './utils/review'
 
@@ -33,20 +33,41 @@ export interface Sheet {
   content: SheetContent
 }
 
-export interface QuizQuestion {
+interface QuizQuestionBase {
   id: number
   lessonId: number
-  type: 'mcq' | 'true-false'
   question: string
-  choices: string[]
-  /** Index de la bonne réponse dans choices */
-  answer: number
+  /** Peut être vide (« relier » : la correction affiche les bonnes paires) */
   explanation: string
   /** Révision espacée */
   review: ReviewState
   /** Copie de review.due, indexée pour trouver les questions à revoir */
   due: Date
 }
+
+export type ChoiceQuestion = QuizQuestionBase & {
+  type: 'mcq' | 'true-false'
+  choices: string[]
+  /** Index de la bonne réponse dans choices */
+  answer: number
+}
+
+/** Relier chaque mot (left) à sa définition (right) */
+export type MatchQuestion = QuizQuestionBase & {
+  type: 'match'
+  pairs: { left: string; right: string }[]
+}
+
+/** Remettre les étapes dans l'ordre (items rangés dans le bon ordre) */
+export type OrderQuestion = QuizQuestionBase & {
+  type: 'order'
+  items: string[]
+}
+
+export type QuizQuestion = ChoiceQuestion | MatchQuestion | OrderQuestion
+
+/** Omit appliqué à chaque format de question séparément */
+type OmitEach<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
 
 export type NewSubject = Pick<Subject, 'name' | 'icon' | 'color'>
 
@@ -76,7 +97,8 @@ export const db = new Dexie('levelup') as Dexie & {
   subjects: EntityTable<Subject, 'id'>
   lessons: EntityTable<Lesson, 'id'>
   sheets: EntityTable<Sheet, 'id'>
-  quizQuestions: EntityTable<QuizQuestion, 'id'>
+  // Type d'insertion explicite : EntityTable fusionnerait les formats de question en un seul
+  quizQuestions: Table<QuizQuestion, number, OmitEach<QuizQuestion, 'id'>>
 }
 
 // ++id plutôt que des UUID : crypto.randomUUID() n'existe pas en HTTP via l'IP locale
@@ -122,7 +144,7 @@ db.version(4)
     tx
       .table('quizQuestions')
       .toCollection()
-      .modify((question: Partial<QuizQuestion>) => {
+      .modify((question: { review?: ReviewState; due?: Date }) => {
         const review = newReviewState()
         question.review = review
         question.due = review.due
@@ -144,7 +166,7 @@ db.on('populate', async (tx) => {
 /** Ce que /generate produit pour une leçon */
 export interface GeneratedContent {
   sheet: SheetContent
-  quiz: Omit<QuizQuestion, 'id' | 'lessonId' | 'review' | 'due'>[]
+  quiz: OmitEach<QuizQuestion, 'id' | 'lessonId' | 'review' | 'due'>[]
 }
 
 const contentTables = () => [db.sheets, db.quizQuestions]

@@ -90,7 +90,9 @@ describe('base locale', () => {
     const question = (await db.quizQuestions.where('lessonId').equals(lessonId).toArray()).find(
       (q) => q.id !== removedId,
     )
-    if (!question) throw new Error('contenu manquant')
+    if (!question || question.type === 'match' || question.type === 'order') {
+      throw new Error('contenu manquant')
+    }
 
     await saveLessonEdits(lessonId, {
       title: 'Titre corrigé',
