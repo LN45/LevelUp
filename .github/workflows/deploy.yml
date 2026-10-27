@@ -1,0 +1,70 @@
+# Build de l'appli et déploiement sur GitHub Pages à chaque push sur main.
+# Actions tierces épinglées par SHA de commit (tag en commentaire) ; aucun pull_request_target.
+name: Déploiement GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Rien par défaut : chaque job ne reçoit que ce dont il a besoin
+permissions: {}
+
+# Un seul déploiement à la fois, sans annuler celui en cours
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # Le script lint corrige ce qu'il peut : toute correction signifie un fichier non conforme
+      - name: Lint
+        run: |
+          npm run lint
+          git diff --exit-code
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - name: Build
+        env:
+          # Valeurs publiques (elles finissent dans le code du front), gardées hors du dépôt
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_APP_TOKEN: ${{ secrets.VITE_APP_TOKEN }}
+        run: |
+          if [ -z "$VITE_API_URL" ]; then echo "::error::Variable VITE_API_URL manquante"; exit 1; fi
+          if [ -z "$VITE_APP_TOKEN" ]; then echo "::error::Secret VITE_APP_TOKEN manquant"; exit 1; fi
+          npm run build
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: app/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

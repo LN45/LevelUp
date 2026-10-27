@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- Icône de l'appli : tête de la mascotte (KitsuneMascot.vue, humeur « content »), centrée
+       dans la zone sûre des icônes « maskable » (cercle de rayon 80) -->
+  <rect width="200" height="200" fill="#fbf5e9" />
+  <g transform="translate(100 104) scale(1.15) translate(-100 -66)" stroke="#1f2a55" stroke-width="2.5" stroke-linejoin="round">
+    <path fill="#b5531f" d="M72 54 L62 8 L96 46 Z" />
+    <path fill="#46527f" stroke="none" d="M75 47 L67 21 L88 44 Z" />
+    <path fill="#1f2a55" stroke="none" d="M62 8 L65 21.8 L72.2 19.4 Z" />
+    <path fill="#b5531f" d="M128 54 L138 8 L104 46 Z" />
+    <path fill="#46527f" stroke="none" d="M125 47 L133 21 L112 44 Z" />
+    <path fill="#1f2a55" stroke="none" d="M138 8 L135 21.8 L127.8 19.4 Z" />
+
+    <g stroke="none">
+      <path fill="#b5531f" d="M100 44 L128 52 L143 76 L134 94 L100 124 L66 94 L57 76 L72 52 Z" />
+      <path fill="#8a3a17" d="M100 44 L128 52 L143 76 L107 80 L100 60 Z" />
+      <path fill="#fffaf2" d="M58.5 77 L80 84 L100 90 L120 84 L141.5 77 L133 93 L100 122 L67 93 Z" />
+      <path fill="#b5531f" d="M93 80 L100 98 L107 80 L100 60 Z" />
+    </g>
+    <path fill="none" d="M100 44 L128 52 L143 76 L134 94 L100 124 L66 94 L57 76 L72 52 Z" />
+    <path fill="#d4a72c" stroke="none" d="M100 50 L104 59 L100 67 L96 59 Z" />
+    <path fill="#1f2a55" stroke="none" d="M95 98 L105 98 L100 104 Z" />
+
+    <path fill="#d4a72c" d="M73 75 Q83 71 93 77 Q82 80 73 75 Z" />
+    <path fill="#d4a72c" d="M127 75 Q117 71 107 77 Q118 80 127 75 Z" />
+    <ellipse fill="#1f2a55" stroke="none" cx="85" cy="76" rx="2" ry="2.6" />
+    <ellipse fill="#1f2a55" stroke="none" cx="115" cy="76" rx="2" ry="2.6" />
+    <g fill="none" stroke-linecap="round">
+      <path stroke="#d4a72c" stroke-width="3.5" d="M70 61 L90 67 M130 61 L110 67" />
+      <path stroke-width="3" d="M94 110 Q102 113 108 106" />
+    </g>
+  </g>
+</svg>

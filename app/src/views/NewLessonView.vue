@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useOnline } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { computed, onBeforeUnmount, reactive, ref, useTemplateRef } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
@@ -29,6 +30,9 @@ const draft = reactive({ title: '', text: '', subjectId: presetSubject })
 let saved = false
 
 const PHOTO_TIP = 'Prends ton cours en photo, page par page, bien à plat et avec de la lumière.'
+const OFFLINE_TIP =
+  'Pas de connexion internet. Tu peux réviser, mais pour lire un nouveau cours, il faut internet.'
+const online = useOnline()
 
 const remaining = computed(() => MAX_IMAGES - photos.value.length)
 const canSave = computed(
@@ -149,6 +153,10 @@ onBeforeUnmount(() => photos.value.forEach((photo) => URL.revokeObjectURL(photo.
         <p>{{ PHOTO_TIP }}</p>
         <SpeakButton :text="PHOTO_TIP" />
       </div>
+      <div v-if="!online" class="warning" role="status">
+        <p>{{ OFFLINE_TIP }}</p>
+        <SpeakButton :text="OFFLINE_TIP" />
+      </div>
 
       <div class="sources">
         <label class="btn source">
@@ -227,7 +235,7 @@ onBeforeUnmount(() => photos.value.forEach((photo) => URL.revokeObjectURL(photo.
       <button
         type="button"
         class="btn btn--primary main-action"
-        :disabled="!photos.length || busy"
+        :disabled="!photos.length || busy || !online"
         @click="readCourse"
       >
         Lire mon cours

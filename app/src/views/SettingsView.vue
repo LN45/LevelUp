@@ -4,6 +4,7 @@ import { ref, useTemplateRef, type StyleValue } from 'vue'
 
 import { createBackup, parseBackup, restoreBackup, type Backup } from '@/backup'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import InstallCard from '@/components/InstallCard.vue'
 import SpeakButton from '@/components/SpeakButton.vue'
 import { isStoragePersisted } from '@/db'
 import { FONT_SIZES, NICKNAME_MAX_LENGTH, useSettingsStore, type Settings } from '@/stores/settings'
@@ -131,6 +132,8 @@ async function importData(event: Event) {
 <template>
   <section class="settings">
     <h1>Réglages</h1>
+
+    <InstallCard />
 
     <div class="field">
       <label for="nickname">Pseudo</label>

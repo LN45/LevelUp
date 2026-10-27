@@ -2,10 +2,12 @@
 import { storeToRefs } from 'pinia'
 import { computed, ref } from 'vue'
 
+import InstallCard from '@/components/InstallCard.vue'
 import KitsuneMascot from '@/components/KitsuneMascot.vue'
 import ProgressBar from '@/components/ProgressBar.vue'
 import SpeakButton from '@/components/SpeakButton.vue'
 import { useLiveQuery } from '@/composables/useLiveQuery'
+import { usePwa } from '@/composables/usePwa'
 import { db } from '@/db'
 import { useProgressStore } from '@/stores/progress'
 import { NICKNAME_MAX_LENGTH, useSettingsStore } from '@/stores/settings'
@@ -13,6 +15,8 @@ import { endOfDay, groupDueByLesson, type DueGroup } from '@/utils/review'
 
 const { settings } = storeToRefs(useSettingsStore())
 const { xp, level } = storeToRefs(useProgressStore())
+// Mise à jour proposée ici seulement : jamais d'interruption pendant un quiz
+const { needRefresh, update } = usePwa()
 
 const levelText = computed(() =>
   level.value.toNext === null
@@ -84,6 +88,13 @@ function saveNickname(nickname: string) {
         📷 Ajouter un cours
       </RouterLink>
 
+      <div v-if="needRefresh" class="card update" role="status">
+        <span>✨ Une nouvelle version de l’appli est prête.</span>
+        <button type="button" class="btn" @click="update">Mettre à jour</button>
+      </div>
+
+      <InstallCard dismissible />
+
       <section v-if="dueGroups" class="review" aria-labelledby="review-title">
         <h2 id="review-title">À réviser aujourd’hui</h2>
         <p v-if="!dueGroups.length" class="nothing">Rien à réviser aujourd’hui. Bravo ! 🎉</p>
@@ -152,6 +163,11 @@ function saveNickname(nickname: string) {
 }
 .level-text {
   color: var(--color-ink-soft);
+}
+
+.update {
+  flex-wrap: wrap;
+  justify-content: space-between;
 }
 
 .welcome {
