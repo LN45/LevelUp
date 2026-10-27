@@ -10,6 +10,12 @@ import {
   saveGeneratedContent,
   saveLessonEdits,
 } from '@/db'
+import { newReviewState } from '@/utils/review'
+
+const reviewFields = () => {
+  const review = newReviewState()
+  return { review, due: review.due }
+}
 
 async function addLessonWithContent(subjectId: number) {
   const lessonId = await db.lessons.add({
@@ -26,6 +32,7 @@ async function addLessonWithContent(subjectId: number) {
     choices: ['Vrai', 'Faux'],
     answer: 0,
     explanation: 'Explication.',
+    ...reviewFields(),
   })
   return lessonId
 }
@@ -78,6 +85,7 @@ describe('base locale', () => {
       choices: ['Vrai', 'Faux'],
       answer: 0,
       explanation: '-',
+      ...reviewFields(),
     })
     const question = (await db.quizQuestions.where('lessonId').equals(lessonId).toArray()).find(
       (q) => q.id !== removedId,

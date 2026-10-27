@@ -1,5 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie'
 
+import { endOfDay, newReviewState, rateAnswer, type ReviewState } from './utils/review'
+
 export interface Subject {
   id: number
   name: string
@@ -17,7 +19,7 @@ export interface Lesson {
   createdAt: Date
 }
 
-// Les textes de la fiche, des cartes et du quiz peuvent contenir des mots-clés en **gras**.
+// Les textes de la fiche et du quiz peuvent contenir des mots-clés en **gras**.
 // Seuls les champs indexés sont figés par le schéma : ces types peuvent évoluer sans migration.
 export interface SheetContent {
   /** Petit résumé du cours, une phrase courte par élément */
@@ -40,6 +42,10 @@ export interface QuizQuestion {
   /** Index de la bonne réponse dans choices */
   answer: number
   explanation: string
+  /** Révision espacée */
+  review: ReviewState
+  /** Copie de review.due, indexée pour trouver les questions à revoir */
+  due: Date
 }
 
 export type NewSubject = Pick<Subject, 'name' | 'icon' | 'color'>
@@ -109,6 +115,20 @@ db.version(2)
 // Version 3 : les flashcards sont abandonnées, leur table est supprimée
 db.version(3).stores({ cards: null })
 
+// Version 4 : révision espacée des questions (état FSRS + date indexée), toutes à revoir dès maintenant
+db.version(4)
+  .stores({ quizQuestions: '++id, lessonId, due' })
+  .upgrade((tx) =>
+    tx
+      .table('quizQuestions')
+      .toCollection()
+      .modify((question: Partial<QuizQuestion>) => {
+        const review = newReviewState()
+        question.review = review
+        question.due = review.due
+      }),
+  )
+
 db.on('populate', async (tx) => {
   const createdAt = new Date()
   await tx.table('subjects').bulkAdd(
@@ -124,7 +144,7 @@ db.on('populate', async (tx) => {
 /** Ce que /generate produit pour une leçon */
 export interface GeneratedContent {
   sheet: SheetContent
-  quiz: Omit<QuizQuestion, 'id' | 'lessonId'>[]
+  quiz: Omit<QuizQuestion, 'id' | 'lessonId' | 'review' | 'due'>[]
 }
 
 const contentTables = () => [db.sheets, db.quizQuestions]
@@ -136,7 +156,7 @@ async function deleteContent(lessonIds: number[]): Promise<void> {
   )
 }
 
-/** Remplace la fiche et les questions d'une leçon par celles générées */
+/** Remplace la fiche et les questions d'une leçon par celles générées (questions à revoir dès maintenant) */
 export async function saveGeneratedContent(
   lessonId: number,
   generated: GeneratedContent,
@@ -144,7 +164,36 @@ export async function saveGeneratedContent(
   await db.transaction('rw', contentTables(), async () => {
     await deleteContent([lessonId])
     await db.sheets.add({ lessonId, content: generated.sheet })
-    await db.quizQuestions.bulkAdd(generated.quiz.map((question) => ({ ...question, lessonId })))
+    await db.quizQuestions.bulkAdd(
+      generated.quiz.map((question) => {
+        const review = newReviewState()
+        return { ...question, lessonId, review, due: review.due }
+      }),
+    )
+  })
+}
+
+/** Questions d'une leçon à revoir aujourd'hui */
+export function dueQuestions(lessonId: number, now = new Date()): Promise<QuizQuestion[]> {
+  const limit = endOfDay(now)
+  return db.quizQuestions
+    .where('lessonId')
+    .equals(lessonId)
+    .filter((question) => question.due <= limit)
+    .toArray()
+}
+
+/** Enregistre la première réponse d'une série et planifie la prochaine révision */
+export async function recordQuizAnswer(
+  questionId: number,
+  correct: boolean,
+  now = new Date(),
+): Promise<void> {
+  await db.transaction('rw', db.quizQuestions, async () => {
+    const question = await db.quizQuestions.get(questionId)
+    if (!question) return
+    const review = rateAnswer(question.review, correct, now)
+    await db.quizQuestions.update(questionId, { review, due: review.due })
   })
 }
 

@@ -4,9 +4,25 @@ import { computed, ref } from 'vue'
 
 import KitsuneMascot from '@/components/KitsuneMascot.vue'
 import SpeakButton from '@/components/SpeakButton.vue'
+import { useLiveQuery } from '@/composables/useLiveQuery'
+import { db } from '@/db'
 import { NICKNAME_MAX_LENGTH, useSettingsStore } from '@/stores/settings'
+import { endOfDay, groupDueByLesson, type DueGroup } from '@/utils/review'
 
 const { settings } = storeToRefs(useSettingsStore())
+
+/** « À réviser aujourd'hui » : par matière puis par leçon, jamais mélangées */
+const dueGroups = useLiveQuery(
+  async () => {
+    const [due, lessons, subjects] = await Promise.all([
+      db.quizQuestions.where('due').belowOrEqual(endOfDay()).toArray(),
+      db.lessons.toArray(),
+      db.subjects.toArray(),
+    ])
+    return groupDueByLesson(due, lessons, subjects)
+  },
+  undefined as DueGroup[] | undefined,
+)
 
 const isFirstVisit = computed(() => settings.value.nickname === null)
 const nicknameDraft = ref('')
@@ -48,9 +64,37 @@ function saveNickname(nickname: string) {
       <button type="button" class="btn" @click="saveNickname('')">Plus tard</button>
     </form>
 
-    <RouterLink v-else to="/lessons/new" class="btn btn--primary main-action">
-      📷 Ajouter un cours
-    </RouterLink>
+    <template v-else>
+      <RouterLink to="/lessons/new" class="btn btn--primary main-action">
+        📷 Ajouter un cours
+      </RouterLink>
+
+      <section v-if="dueGroups" class="review" aria-labelledby="review-title">
+        <h2 id="review-title">À réviser aujourd’hui</h2>
+        <p v-if="!dueGroups.length" class="nothing">Rien à réviser aujourd’hui. Bravo ! 🎉</p>
+        <div
+          v-for="group in dueGroups"
+          :key="group.subject.id"
+          class="group"
+          :style="{ '--subject-color': group.subject.color }"
+        >
+          <h3>
+            <span aria-hidden="true">{{ group.subject.icon }}</span> {{ group.subject.name }}
+          </h3>
+          <RouterLink
+            v-for="item in group.lessons"
+            :key="item.lesson.id"
+            :to="{ name: 'review', params: { id: item.lesson.id } }"
+            class="card due-lesson"
+          >
+            <span class="due-title">{{ item.lesson.title }}</span>
+            <span class="due-count">
+              {{ item.count }} question{{ item.count > 1 ? 's' : '' }} ›
+            </span>
+          </RouterLink>
+        </div>
+      </section>
+    </template>
   </section>
 </template>
 
@@ -93,5 +137,33 @@ function saveNickname(nickname: string) {
 }
 .welcome label {
   font-weight: 700;
+}
+
+.review,
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s);
+}
+.review h2,
+.group h3 {
+  margin: 0;
+}
+.group {
+  margin-top: var(--space-s);
+}
+.nothing {
+  margin: 0;
+}
+.due-lesson {
+  justify-content: space-between;
+  border-left: 0.6rem solid var(--subject-color);
+}
+.due-title {
+  font-weight: 700;
+}
+.due-count {
+  flex-shrink: 0;
+  color: var(--color-ink-soft);
 }
 </style>

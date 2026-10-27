@@ -19,6 +19,7 @@ const router = createRouter({
     { path: '/lessons/new', name: 'new-lesson', component: NewLessonView },
     { path: '/lessons/:id(\\d+)', name: 'lesson', component: LessonView },
     { path: '/lessons/:id(\\d+)/quiz', name: 'quiz', component: QuizView },
+    { path: '/lessons/:id(\\d+)/review', name: 'review', component: QuizView },
     { path: '/subjects', name: 'subjects', component: SubjectsView },
     { path: '/subjects/:id(\\d+)', name: 'subject', component: SubjectLessonsView },
     { path: '/settings', name: 'settings', component: SettingsView },

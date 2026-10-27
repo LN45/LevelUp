@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useTemplateRef } from 'vue'
+import { computed, ref, toRaw, useTemplateRef } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -73,8 +73,9 @@ function cleanEdits(d: LessonEdits): LessonEdits {
         definition: trim(definition),
       })),
     },
+    // toRaw : l'état de révision (objet imbriqué) ne doit pas être un proxy Vue pour IndexedDB
     quiz: d.quiz.map((question) => ({
-      ...question,
+      ...toRaw(question),
       question: trim(question.question),
       explanation: trim(question.explanation),
       choices: question.choices.map(trim),

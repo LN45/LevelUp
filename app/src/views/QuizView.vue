@@ -7,12 +7,15 @@ import KitsuneMascot from '@/components/KitsuneMascot.vue'
 import RichText from '@/components/RichText.vue'
 import SpeakButton from '@/components/SpeakButton.vue'
 import { useReviewSession } from '@/composables/useReviewSession'
-import { db, type Lesson, type QuizQuestion } from '@/db'
+import { db, dueQuestions, recordQuizAnswer, type Lesson, type QuizQuestion } from '@/db'
 import { useSettingsStore } from '@/stores/settings'
 
 const MAX_QUESTIONS = 8
 
-const lessonId = Number(useRoute().params.id)
+const route = useRoute()
+const lessonId = Number(route.params.id)
+/** Révision : seulement les questions de la leçon à revoir aujourd'hui (sinon tout le quiz) */
+const isReview = route.name === 'review'
 const { settings } = storeToRefs(useSettingsStore())
 
 const lesson = ref<Lesson | null>(null)
@@ -20,6 +23,8 @@ const questions = ref<QuizQuestion[]>([])
 const loaded = ref(false)
 /** Index du choix touché pour la question affichée, null tant qu'on n'a pas répondu */
 const chosen = ref<number | null>(null)
+/** Révision : questions encore à revoir une fois la série finie (pour « Encore une série ? ») */
+const remainingDue = ref(0)
 
 const session = useReviewSession<QuizQuestion>({ maxItems: MAX_QUESTIONS })
 const question = session.current
@@ -27,14 +32,20 @@ const question = session.current
 async function load() {
   const [found, lessonQuestions] = await Promise.all([
     db.lessons.get(lessonId),
-    db.quizQuestions.where('lessonId').equals(lessonId).toArray(),
+    isReview
+      ? dueQuestions(lessonId)
+      : db.quizQuestions.where('lessonId').equals(lessonId).toArray(),
   ])
   lesson.value = found ?? null
   questions.value = lessonQuestions
+  chosen.value = null
   session.start(lessonQuestions)
   loaded.value = true
 }
 void load()
+
+// Enregistrements en cours, attendus avant de compter ce qu'il reste à réviser
+let saving = Promise.resolve()
 
 const answered = computed(() => chosen.value !== null)
 const isCorrect = computed(() => chosen.value === question.value?.answer)
@@ -58,14 +69,32 @@ function choose(index: number) {
 }
 
 function next() {
-  session.answer(isCorrect.value)
+  // Valeurs lues tout de suite : l'enregistrement s'exécute après, une fois la réponse effacée
+  const current = question.value
+  const correct = isCorrect.value
+  // Seule la première réponse compte pour la révision espacée : le second passage sert à apprendre
+  if (current && !session.isRetry.value) {
+    saving = saving.then(() => recordQuizAnswer(current.id, correct))
+  }
+  session.answer(correct)
   chosen.value = null
 }
 
 function restart() {
+  if (isReview) {
+    // Nouvelle série avec les questions encore dues (les autres sont planifiées plus tard)
+    void load()
+    return
+  }
   chosen.value = null
   session.start(questions.value)
 }
+
+watch(session.isDone, async (done) => {
+  if (!done || !isReview) return
+  await saving
+  remainingDue.value = (await dueQuestions(lessonId)).length
+})
 
 /** Apparence d'un choix une fois la réponse donnée : bonne réponse en doré, le reste en retrait */
 function choiceState(index: number) {
@@ -98,7 +127,13 @@ watch([question, answered], async () => {
       ← {{ lesson?.title ?? 'Leçon' }}
     </RouterLink>
 
-    <p v-if="!questions.length">Pas encore de quiz pour cette leçon.</p>
+    <p v-if="isReview" class="mode">🔁 Révision</p>
+
+    <div v-if="!questions.length && isReview" class="end">
+      <KitsuneMascot class="mascot" mood="proud" />
+      <p class="bubble">Rien à réviser pour cette leçon aujourd’hui. Bravo !</p>
+    </div>
+    <p v-else-if="!questions.length">Pas encore de quiz pour cette leçon.</p>
 
     <!-- Clé par passage : nouvel affichage propre pour chaque question -->
     <div
@@ -178,7 +213,20 @@ watch([question, answered], async () => {
         <p>{{ endMessage }}</p>
         <SpeakButton :text="endMessage" />
       </div>
-      <button type="button" class="btn btn--primary main-action" @click="restart">
+      <button
+        v-if="isReview && remainingDue"
+        type="button"
+        class="btn btn--primary main-action"
+        @click="restart"
+      >
+        ➡️ Encore une série ({{ remainingDue }} questions)
+      </button>
+      <button
+        v-else-if="!isReview"
+        type="button"
+        class="btn btn--primary main-action"
+        @click="restart"
+      >
         🔁 Recommencer
       </button>
       <RouterLink :to="{ name: 'lesson', params: { id: lessonId } }" class="btn">
@@ -198,6 +246,11 @@ watch([question, answered], async () => {
 }
 .back {
   align-self: flex-start;
+}
+.mode {
+  margin: 0;
+  color: var(--color-ink-soft);
+  font-weight: 700;
 }
 
 .progress {
