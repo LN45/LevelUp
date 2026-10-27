@@ -62,7 +62,7 @@ export function extractCourse(images: ImagePayload[]): Promise<{ title: string; 
   return post('/extract', { images })
 }
 
-/** Fiche, flashcards et quiz d'une leçon (aucune donnée personnelle envoyée) */
+/** Fiche et quiz d'une leçon (aucune donnée personnelle envoyée) */
 export function generateLesson(course: {
   title: string
   subject: string

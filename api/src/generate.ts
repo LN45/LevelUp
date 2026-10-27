@@ -14,7 +14,8 @@ export const generateRequestSchema = z.object({
 })
 
 // Schéma imposé à l'IA : volontairement souple sur les quantités, resserré par normalize().
-// "source" (phrase recopiée du cours) ancre la fiche dans le cours et n'est pas renvoyée au front.
+// "source" (phrase recopiée du cours) ancre chaque élément dans le cours ; elle est vérifiée
+// puis retirée : elle n'est pas renvoyée au front.
 const aiOutputSchema = z.object({
   summary: z
     .array(z.object({ source: z.string().max(500), sentence: z.string().max(300) }))
@@ -29,17 +30,19 @@ const aiOutputSchema = z.object({
       }),
     )
     .max(10),
-  flashcards: z
-    .array(z.object({ front: z.string().max(200), back: z.string().max(300) }))
-    .min(1)
-    .max(15),
   quiz: z
     .array(
+      // L'IA écrit la bonne réponse en toutes lettres : c'est l'API qui construit les choix,
+      // la position de la bonne réponse est donc connue par construction
       z.object({
+        source: z.string().max(500),
         type: z.enum(['mcq', 'true-false']),
+        /** QCM : la question ; vrai/faux : "" */
         question: z.string().max(300),
-        choices: z.array(z.string().max(120)).max(4),
-        answer: z.number().int().min(0),
+        /** QCM : la bonne réponse ; vrai/faux : l'affirmation vraie */
+        correct: z.string().max(200),
+        /** QCM : deux mauvaises réponses ; vrai/faux : une version fausse de l'affirmation */
+        wrong: z.array(z.string().max(200)).max(3),
         explanation: z.string().max(300),
       }),
     )
@@ -58,7 +61,7 @@ export interface QuizQuestion {
   explanation: string
 }
 
-const LIMITS = { summary: 6, definitions: 6, flashcards: 10, quiz: 6, minimum: 3 }
+const LIMITS = { summary: 6, definitions: 6, quiz: 8, minimum: 3 }
 /** Part minimale des paires de mots de la citation qu'on doit retrouver dans le cours */
 const GROUNDING_THRESHOLD = 0.8
 
@@ -103,33 +106,82 @@ export function shuffleChoices(question: QuizQuestion, random = Math.random): Qu
   }
 }
 
-/** Question exploitable ou null : QCM à 3 choix distincts, vrai/faux normalisé, bonne réponse valide */
+/**
+ * Construit une question exploitable, ou null.
+ * QCM : bonne réponse + 2 mauvaises, distinctes, mélangées.
+ * Vrai/faux : l'affirmation vraie ou sa version fausse, tirée au hasard.
+ */
 export function normalizeQuestion(raw: AiQuestion, random = Math.random): QuizQuestion | null {
-  const question = raw.question.trim()
+  const correct = raw.correct.trim()
+  const wrong = raw.wrong.map((choice) => choice.trim()).filter(Boolean)
   const explanation = raw.explanation.trim()
-  if (!question || !explanation) return null
+  if (!correct || !explanation) return null
 
   if (raw.type === 'true-false') {
-    if (raw.answer > 1) return null
+    const [falseStatement] = wrong
+    if (!falseStatement || normalizeForMatch(falseStatement) === normalizeForMatch(correct)) {
+      return null
+    }
+    const isTrue = random() < 0.5
     return {
       type: 'true-false',
-      question,
+      question: isTrue ? correct : falseStatement,
       choices: TRUE_FALSE_CHOICES,
-      answer: raw.answer,
+      answer: isTrue ? 0 : 1,
       explanation,
     }
   }
 
-  const choices = raw.choices.map((choice) => choice.trim())
-  const distinct = new Set(choices.map((choice) => choice.toLocaleLowerCase('fr')))
-  if (choices.length !== 3 || distinct.size !== 3 || choices.includes('')) return null
-  if (raw.answer >= choices.length) return null
-  return shuffleChoices({ type: 'mcq', question, choices, answer: raw.answer, explanation }, random)
+  const question = raw.question.trim()
+  const choices = [correct, ...wrong.slice(0, 2)]
+  if (!question || choices.length !== 3) return null
+  if (new Set(choices.map(normalizeForMatch)).size !== 3) return null
+  if (isTautology(question, correct)) return null
+  return shuffleChoices({ type: 'mcq', question, choices, answer: 0, explanation }, random)
+}
+
+// Petits mots qui n'apportent pas d'information (après normalizeForMatch : sans accents)
+const STOP_WORDS = new Set(
+  'avec dans entre pour sont etre elle elles ils leur leurs mais plus tres tout tous toute toutes cest quest quoi quel quelle quels quelles comment pourquoi cela ceci cette ces des les une aux par sur sous qui que dont fait faire peut peuvent'.split(
+    ' ',
+  ),
+)
+
+const contentWords = (text: string) =>
+  normalizeForMatch(text)
+    .replace(/\b(\w)\s/g, '$1') // « qu est » → « quest », « c est » → « cest »
+    .split(' ')
+    .filter((word) => word.length >= 4 && !STOP_WORDS.has(word))
+
+/**
+ * La réponse se contente-t-elle de répéter la question ? (ex. « Qu'est-ce que des
+ * caractéristiques communes ? » → « Les caractéristiques communes entre individus »)
+ * Oui si la plupart de ses mots importants viennent de la question et qu'elle apporte
+ * au plus un mot nouveau.
+ */
+export function isTautology(question: string, answer: string): boolean {
+  const questionWords = new Set(contentWords(question))
+  const answerWords = contentWords(answer)
+  if (!answerWords.length) return true
+  const repeated = answerWords.filter((word) => questionWords.has(word)).length
+  return repeated / answerWords.length >= 0.5 && answerWords.length - repeated <= 1
+}
+
+/** Retire les doublons (même texte, sans tenir compte des majuscules, accents et ponctuation) */
+export function uniqueBy<T>(items: T[], text: (item: T) => string): T[] {
+  const seen = new Set<string>()
+  return items.filter((item) => {
+    const key = normalizeForMatch(text(item))
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 /**
- * Nettoie et plafonne la sortie de l'IA. Les phrases du résumé et les définitions dont la
- * citation est introuvable dans le cours sont écartées. AiError si le résultat est trop pauvre.
+ * Nettoie et plafonne la sortie de l'IA. Tout élément (phrase du résumé, définition, question)
+ * dont la citation est introuvable dans le cours est écarté, comme les questions dont la bonne
+ * réponse répète la question et les doublons. AiError si le résultat est trop pauvre.
  */
 export function normalize(output: AiOutput, course: string, random = Math.random) {
   const summary = output.summary
@@ -142,19 +194,18 @@ export function normalize(output: AiOutput, course: string, random = Math.random
     .map(({ term, definition }) => ({ term: term.trim(), definition: definition.trim() }))
     .filter((d) => d.term && d.definition)
     .slice(0, LIMITS.definitions)
-  const flashcards = output.flashcards
-    .map(({ front, back }) => ({ front: front.trim(), back: back.trim() }))
-    .filter((card) => card.front && card.back)
-    .slice(0, LIMITS.flashcards)
-  const quiz = output.quiz
-    .map((question) => normalizeQuestion(question, random))
-    .filter((question) => question !== null)
-    .slice(0, LIMITS.quiz)
+  const quiz = uniqueBy(
+    output.quiz
+      .filter((question) => isGrounded(question.source, course))
+      .map((question) => normalizeQuestion(question, random))
+      .filter((question) => question !== null),
+    (question) => question.question,
+  ).slice(0, LIMITS.quiz)
 
-  if ([summary, flashcards, quiz].some((list) => list.length < LIMITS.minimum)) {
+  if ([summary, quiz].some((list) => list.length < LIMITS.minimum)) {
     throw new AiError('Contenu généré insuffisant')
   }
-  return { sheet: { summary, definitions }, flashcards, quiz }
+  return { sheet: { summary, definitions }, quiz }
 }
 
 const SYSTEM_PROMPT = `Tu prépares des révisions pour un élève de 6e dyslexique, à partir de son cours.
@@ -164,19 +215,17 @@ Règles pour tout le contenu :
 - Attention aux mots contraires (par exemple fertile et stérile, actif et endormi) : chacun a sa propre définition, souvent opposée.
 - Écris en français, avec un vocabulaire simple de 6e.
 - Phrases courtes : 15 mots maximum.
-- Mets en gras avec **deux étoiles** seulement le mot-clé le plus important d'un point, d'une carte ou d'une question (un ou deux mots maximum) : le gras doit rester rare.
+- Mets en gras avec **deux étoiles** seulement le mot-clé le plus important d'une phrase ou d'une question (un ou deux mots maximum) : le gras doit rester rare.
 
 Réponds uniquement avec un objet JSON, sans balises Markdown autour, avec ces champs :
 - "summary" : un petit résumé du cours en 4 à 6 phrases courtes, dans l'ordre du cours, qui se lisent à la suite comme un texte. Une phrase peut donner un exemple concret tiré du cours (« Par exemple, … »). Pour chaque phrase : "source" est la phrase du cours sur laquelle elle s'appuie, recopiée mot pour mot ; "sentence" est la phrase du résumé, qui dit la même chose que "source".
 - "definitions" : jusqu'à 6 mots importants du cours. "source" : la phrase du cours qui définit ce mot, recopiée mot pour mot. "term" : le mot. "definition" : une définition courte et simple, qui dit la même chose que "source".
-- "flashcards" : 6 à 10 cartes. "front" : une question courte ou un mot. "back" : la réponse courte.
-- "quiz" : 6 questions, environ 4 QCM et 2 vrai/faux.
-  - QCM : "type": "mcq", exactement 3 choix courts dans "choices", une seule bonne réponse.
-  - Vrai/faux : "type": "true-false", "question" est une affirmation, "choices": ["Vrai", "Faux"]. Au moins une affirmation doit être fausse (réponse "Faux"), sans être piégeuse.
-  - "answer" : position de la bonne réponse dans "choices" (0 pour la première).
+- "quiz" : 8 questions, environ 5 QCM et 3 vrai/faux, chacune sur une notion différente (jamais deux fois la même question, même tournée autrement), dans l'ordre du cours. Pour chaque question, "source" est la phrase du cours qui contient la bonne réponse, recopiée mot pour mot.
+  - QCM : "type": "mcq". "question" : la question. "correct" : la bonne réponse, courte, qui dit exactement la même chose que "source". "wrong" : exactement 2 mauvaises réponses courtes, clairement fausses d'après le cours. Les 3 réponses ont la même forme et à peu près la même longueur : la bonne réponse ne doit pas se reconnaître à sa formulation.
+  - Vrai/faux : "type": "true-false", "question": "". "correct" : une affirmation vraie, qui dit exactement la même chose que "source". "wrong" : une seule version fausse de cette affirmation (par exemple avec le contraire), sans être piégeuse.
   - Pas de piège, pas de double négation, pas de « sauf ».
-  - La bonne réponse explique vraiment : elle ne se contente jamais de répéter le mot de la question.
-  - "explanation" : une phrase courte et encourageante qui explique la bonne réponse.`
+  - La bonne réponse explique vraiment avec les mots du cours : elle ne se contente jamais de répéter les mots de la question. Pour "Qu'est-ce que <notion> ?", la réponse ne doit pas être "<notion>" redit autrement.
+  - "explanation" : une phrase courte qui énonce ce qui est vrai d'après le cours (par exemple « Les animaux <groupe> <ce qui est vrai>. »). Elle s'affiche aussi après une mauvaise réponse : jamais de « bravo », « très bien », « bien compris » ni de félicitations.`
 
 export const generate = new Hono<{ Bindings: Env }>().post('/', async (c) => {
   const request = generateRequestSchema.safeParse(await c.req.json().catch(() => null))
@@ -187,6 +236,7 @@ export const generate = new Hono<{ Bindings: Env }>().post('/', async (c) => {
   const attempt = async () =>
     normalize(
       await generateJson(c.env, {
+        model: c.env.GENERATE_MODEL,
         system: SYSTEM_PROMPT,
         prompt: `Matière : ${subject || 'non précisée'}\nTitre : ${title || 'sans titre'}\n\nCours :\n${text}`,
         schema: aiOutputSchema,

@@ -44,6 +44,7 @@ export const extract = new Hono<{ Bindings: Env }>().post('/', async (c) => {
   await consumeDailyQuota(c.env)
 
   const extraction = await generateJson(c.env, {
+    model: c.env.EXTRACT_MODEL,
     system: SYSTEM_PROMPT,
     prompt: `Voici ${request.data.images.length} photo(s) du cours à transcrire.`,
     images: request.data.images,

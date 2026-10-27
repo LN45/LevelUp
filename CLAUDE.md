@@ -4,9 +4,10 @@
 
 Application mobile (PWA) d'aide aux révisions pour des élèves de collège, **pensée pour les élèves avec des troubles dys** (lecture, orthographe, écriture).
 L'élève prend en photo son cours (manuscrit ou imprimé) ou importe un PDF. L'IA en extrait le texte, puis génère :
-- une **fiche de révision** courte,
-- des **flashcards**,
-- des **quiz à cocher** (aucune saisie de texte).
+- une **fiche de révision** courte (petit résumé + mots à retenir),
+- un **quiz à cocher** (aucune saisie de texte).
+
+Les flashcards ont été essayées puis abandonnées (étape 7) : jugées peu utiles, et le modèle produisait des réponses peu claires.
 
 Utilisation principale : **sur téléphone portable**. Pas d'oral en réponse pour l'instant (prévu plus tard).
 
@@ -30,7 +31,7 @@ Utilisation principale : **sur téléphone portable**. Pas d'oral en réponse po
 - **Pinia** (état), **Vue Router**, **VueUse**
 - **Dexie** (IndexedDB) : toutes les données restent sur le téléphone
 - **pdfjs-dist** : extraction de texte des PDF (ou rendu en images si PDF scanné)
-- **ts-fsrs** : révision espacée
+- **ts-fsrs** : révision espacée des questions du quiz
 - **vite-plugin-pwa** : installation et hors-ligne
 - CSS : CSS natif scoped + variables CSS (design tokens). Pas de lib UI.
 - Police **Luciole** auto-hébergée (licence CC-BY), avec **OpenDyslexic** en option dans les réglages
@@ -39,7 +40,7 @@ Utilisation principale : **sur téléphone portable**. Pas d'oral en réponse po
 
 ### Backend — `api/`
 - **Hono** sur **Cloudflare Workers, plan gratuit** (dev local avec `wrangler dev`)
-- IA : **Cloudflare Workers AI** (allocation gratuite quotidienne), appelé via la liaison `AI` du Worker : aucune clé API, aucun compte tiers. Modèle configurable via la variable `AI_MODEL` (défaut : `@cf/mistralai/mistral-small-3.1-24b-instruct`, qui accepte les images). En local, `wrangler dev` appelle le vrai Workers AI (nécessite `wrangler login`)
+- IA : **Cloudflare Workers AI** (allocation gratuite quotidienne), appelé via la liaison `AI` du Worker : aucune clé API, aucun compte tiers. Modèles configurables : `EXTRACT_MODEL` (lecture des photos, modèle de vision) et `GENERATE_MODEL` (fiche, cartes, quiz) ; défaut pour les deux : `@cf/mistralai/mistral-small-3.1-24b-instruct` (comparé en octobre 2026 à gpt-oss-120b, Llama 3.3 70B et Qwen 3.8 27B : meilleur compromis justesse / durée / coût). En local, `wrangler dev` appelle le vrai Workers AI (nécessite `wrangler login`)
 - **Zod** : validation des entrées et des sorties de l'IA
 - Sorties structurées : JSON schema imposé au modèle (`guided_json`, généré depuis le schéma Zod), puis **toujours** valider avec Zod
 - Tout l'appel au fournisseur d'IA est isolé dans **un seul module**, pour pouvoir passer plus tard à un autre fournisseur (ex. API Claude) sans toucher au reste
@@ -79,7 +80,7 @@ Quand une étape en a besoin, **arrête-toi**, explique précisément quoi faire
 
 - **Mobile-first** : utilisable d'une main, gros boutons (≥ 48 px), navigation en bas, une action principale par écran.
 - **Aucune saisie de texte obligatoire** pour l'élève (la correction du texte extrait peut être faite par un parent).
-- **Bouton 🔊 (lecture vocale)** sur toute fiche, question, proposition, carte et explication, via `speechSynthesis` en voix française.
+- **Bouton 🔊 (lecture vocale)** sur toute fiche, question, proposition et explication, via `speechSynthesis` en voix française.
 - Typographie : taille de base ≥ 18 px, interligne ≥ 1.5, espacement des lettres légèrement augmenté, texte aligné à gauche (jamais justifié), fond crème (pas de blanc pur), bon contraste.
 - Réglages persistés : police, taille, interligne.
 - Pas de chronomètre, pas de pénalité, feedback encourageant, séries courtes (5 à 8 questions).
@@ -102,13 +103,12 @@ L'appli est construite autour de l'univers des kitsunés (renards du folklore ja
 
 - Niveau 6e, vocabulaire simple, phrases courtes (≤ 15 mots).
 - Fiche : 5 à 8 points clés maximum, mots-clés marqués en gras, définitions courtes, exemples concrets.
-- Flashcards : recto = une question ou un mot, verso = réponse courte.
 - Quiz : **3 choix** par QCM, propositions courtes, pas de piège ni de double négation, une explication d'une phrase par question.
 - Rester fidèle au cours : ne rien inventer qui n'y est pas.
 
 ## Modèle de données (indicatif, à affiner à l'étape concernée)
 
-`Subject` (matière) · `Lesson` (titre, matière, texte source relu, date) · `Sheet` (fiche liée à une leçon) · `Card` (flashcard + état FSRS) · `QuizQuestion` (type, question, choix, bonne réponse, explication) · `Settings`.
+`Subject` (matière) · `Lesson` (titre, matière, texte source relu, date) · `Sheet` (fiche liée à une leçon : résumé + mots à retenir) · `QuizQuestion` (type, question, choix, bonne réponse, explication, + état FSRS à l'étape 9) · `Settings`.
 
 ## Feuille de route
 
@@ -117,11 +117,11 @@ L'appli est construite autour de l'univers des kitsunés (renards du folklore ja
 - [x] **Étape 2 — Données locales** : base Dexie avec les entités ci-dessus, `navigator.storage.persist()`, stores Pinia, gestion des matières.
 - [x] **Étape 3 — API : socle + extraction** : compte Cloudflare, `wrangler login` et jeton d'appli (actions manuelles), module fournisseur IA (Workers AI), middleware jeton, CORS, limites de taille, quota quotidien KV ; route `POST /extract` (images → texte propre du cours via la vision du modèle).
 - [x] **Étape 4 — Capture du cours** : plusieurs photos par leçon, compression côté client (~1600 px, JPEG), import PDF (texte via pdfjs, sinon pages en images), appel à `/extract`, **écran de relecture et correction** du texte, choix de la matière, enregistrement de la leçon.
-- [x] **Étape 5 — API : génération** : route `POST /generate` (texte → fiche + flashcards + quiz) en sortie structurée validée par Zod, prompt intégrant les contraintes dys.
+- [x] **Étape 5 — API : génération** : route `POST /generate` (texte → fiche + quiz) en sortie structurée validée par Zod, prompt intégrant les contraintes dys.
 - [x] **Étape 6 — Affichage de la fiche** (réalisée avec l'étape 5) : rendu lisible, lecture vocale par section, liste des leçons par matière.
-- [ ] **Étape 7 — Flashcards** : retournement de carte, 🔊 recto et verso, boutons « je savais / je ne savais pas ».
-- [ ] **Étape 8 — Quiz à cocher** : QCM 3 choix et vrai/faux, 🔊 partout, feedback immédiat avec explication (flammes kitsunebi, mascotte), écran de fin encourageant.
-- [ ] **Étape 9 — Révision espacée** : intégration de ts-fsrs, écran d'accueil « À réviser aujourd'hui ».
+- [x] ~~**Étape 7 — Flashcards**~~ : abandonnée après essai (cartes retirées de l'appli et de la génération). Ses acquis servent au quiz : logique de série, lecture automatique, génération fiabilisée (citations, choix construits par l'API).
+- [x] **Étape 8 — Quiz à cocher** : QCM 3 choix et vrai/faux, 🔊 partout, feedback immédiat avec explication (flammes kitsunebi, mascotte), écran de fin encourageant.
+- [ ] **Étape 9 — Révision espacée** : intégration de ts-fsrs sur les questions du quiz (une question ratée revient plus tôt), écran d'accueil « À réviser aujourd'hui ».
 - [ ] **Étape 10 — Formats de quiz supplémentaires** : relier par paires, remettre dans l'ordre (sans saisie).
 - [ ] **Étape 11 — Suivi et sauvegarde** : expérience et niveaux (queues du kitsuné, jusqu'à 9) avec célébration de montée de niveau, progression par matière, export/import JSON de toutes les données.
 - [ ] **Étape 12 — PWA et déploiement** : manifest, icônes, hors-ligne, invitation à installer ; déploiement front sur GitHub Pages via GitHub Actions (permissions minimales, actions épinglées par SHA, `npm ci`), API via `wrangler deploy`, secrets de production, CORS limité à l'URL GitHub Pages ; vérification finale de la checklist sécurité. L'installation PWA et le hors-ligne exigent HTTPS : les tester sur la version GitHub Pages (ou via un tunnel HTTPS gratuit type `cloudflared tunnel`), pas sur l'IP locale.

@@ -5,6 +5,7 @@ import LessonEditView from '@/views/LessonEditView.vue'
 import LessonView from '@/views/LessonView.vue'
 import LessonsSettingsView from '@/views/LessonsSettingsView.vue'
 import NewLessonView from '@/views/NewLessonView.vue'
+import QuizView from '@/views/QuizView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import SubjectLessonsView from '@/views/SubjectLessonsView.vue'
 import SubjectsSettingsView from '@/views/SubjectsSettingsView.vue'
@@ -17,6 +18,7 @@ const router = createRouter({
     { path: '/', name: 'home', component: HomeView },
     { path: '/lessons/new', name: 'new-lesson', component: NewLessonView },
     { path: '/lessons/:id(\\d+)', name: 'lesson', component: LessonView },
+    { path: '/lessons/:id(\\d+)/quiz', name: 'quiz', component: QuizView },
     { path: '/subjects', name: 'subjects', component: SubjectsView },
     { path: '/subjects/:id(\\d+)', name: 'subject', component: SubjectLessonsView },
     { path: '/settings', name: 'settings', component: SettingsView },

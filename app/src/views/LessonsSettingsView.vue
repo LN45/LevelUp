@@ -76,7 +76,7 @@ async function askRemove(lesson: Lesson) {
         <p>
           <strong>Supprimer « {{ pending.title }} » ?</strong>
         </p>
-        <p>Sa fiche, ses cartes et son quiz seront aussi effacés.</p>
+        <p>Sa fiche et son quiz seront aussi effacés.</p>
         <p>On ne pourra pas revenir en arrière.</p>
       </template>
     </ConfirmDialog>

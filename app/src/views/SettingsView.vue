@@ -6,7 +6,7 @@ import SpeakButton from '@/components/SpeakButton.vue'
 import { isStoragePersisted } from '@/db'
 import { FONT_SIZES, NICKNAME_MAX_LENGTH, useSettingsStore, type Settings } from '@/stores/settings'
 
-type ChoiceKey = 'font' | 'fontSize' | 'lineHeight' | 'speechRate'
+type ChoiceKey = 'font' | 'fontSize' | 'lineHeight' | 'speechRate' | 'autoSpeak'
 
 interface ChoiceGroup {
   key: ChoiceKey
@@ -49,6 +49,14 @@ const groups: ChoiceGroup[] = [
     options: [
       { value: 'normal', label: 'Normale' },
       { value: 'slow', label: 'Lente' },
+    ],
+  },
+  {
+    key: 'autoSpeak',
+    legend: 'Lecture automatique des questions',
+    options: [
+      { value: false, label: 'Non' },
+      { value: true, label: 'Oui' },
     ],
   },
 ]

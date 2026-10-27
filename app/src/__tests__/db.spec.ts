@@ -19,7 +19,6 @@ async function addLessonWithContent(subjectId: number) {
     createdAt: new Date(),
   })
   await db.sheets.add({ lessonId, content: { summary: ['Phrase.'], definitions: [] } })
-  await db.cards.add({ lessonId, front: 'Recto', back: 'Verso', due: new Date() })
   await db.quizQuestions.add({
     lessonId,
     type: 'true-false',
@@ -54,12 +53,11 @@ describe('base locale', () => {
     expect(await db.subjects.get(first.id)).toBeUndefined()
     expect(await db.lessons.count()).toBe(1)
     expect(await db.sheets.count()).toBe(1)
-    expect(await db.cards.count()).toBe(1)
     expect(await db.quizQuestions.count()).toBe(1)
     expect((await db.lessons.toArray())[0]?.subjectId).toBe(second.id)
   })
 
-  it('supprime une leçon avec sa fiche, ses cartes et ses questions', async () => {
+  it('supprime une leçon avec sa fiche et ses questions', async () => {
     const kept = await addLessonWithContent(1)
     const removed = await addLessonWithContent(1)
 
@@ -68,22 +66,28 @@ describe('base locale', () => {
     expect(await db.lessons.get(removed)).toBeUndefined()
     expect(await db.lessons.get(kept)).toBeDefined()
     expect(await db.sheets.count()).toBe(1)
-    expect(await db.cards.count()).toBe(1)
     expect(await db.quizQuestions.count()).toBe(1)
   })
 
-  it('enregistre les corrections en gardant les ids des cartes et questions conservées', async () => {
+  it('enregistre les corrections en gardant les ids des questions conservées', async () => {
     const lessonId = await addLessonWithContent(1)
-    await db.cards.add({ lessonId, front: 'À supprimer', back: '-', due: new Date() })
-    const [card] = await db.cards.where('lessonId').equals(lessonId).toArray()
-    const [question] = await db.quizQuestions.where('lessonId').equals(lessonId).toArray()
-    if (!card || !question) throw new Error('contenu manquant')
+    const removedId = await db.quizQuestions.add({
+      lessonId,
+      type: 'true-false',
+      question: 'À supprimer',
+      choices: ['Vrai', 'Faux'],
+      answer: 0,
+      explanation: '-',
+    })
+    const question = (await db.quizQuestions.where('lessonId').equals(lessonId).toArray()).find(
+      (q) => q.id !== removedId,
+    )
+    if (!question) throw new Error('contenu manquant')
 
     await saveLessonEdits(lessonId, {
       title: 'Titre corrigé',
       sourceText: 'Texte corrigé',
       sheet: { summary: ['Phrase corrigée.'], definitions: [] },
-      cards: [{ ...card, back: 'Verso corrigé' }],
       quiz: [{ ...question, answer: 1 }],
     })
 
@@ -93,9 +97,8 @@ describe('base locale', () => {
     })
     const sheet = await db.sheets.where('lessonId').equals(lessonId).first()
     expect(sheet?.content.summary).toEqual(['Phrase corrigée.'])
-    const cards = await db.cards.where('lessonId').equals(lessonId).toArray()
-    expect(cards).toEqual([{ ...card, back: 'Verso corrigé' }])
     expect(await db.quizQuestions.get(question.id)).toMatchObject({ answer: 1 })
+    expect(await db.quizQuestions.get(removedId)).toBeUndefined()
   })
 
   it('convertit les anciennes fiches à points clés en résumé (version 2)', async () => {
@@ -120,22 +123,29 @@ describe('base locale', () => {
     })
   })
 
-  it('remplace le contenu généré d’une leçon, cartes à réviser tout de suite', async () => {
+  it('supprime la table des flashcards en gardant le reste (version 3)', async () => {
+    db.close()
+    await Dexie.delete('levelup')
+    const v2 = new Dexie('levelup')
+    v2.version(2).stores({ lessons: '++id', cards: '++id, lessonId, due' })
+    await v2.table('lessons').add({ title: 'Gardée' })
+    await v2.table('cards').add({ lessonId: 1, front: 'Recto', back: 'Verso', due: new Date() })
+    v2.close()
+
+    await db.open()
+    expect(db.tables.map((table) => table.name)).not.toContain('cards')
+    expect((await db.lessons.toArray()).map((lesson) => lesson.title)).toEqual(['Gardée'])
+  })
+
+  it('remplace le contenu généré d’une leçon', async () => {
     const lessonId = await addLessonWithContent(1)
     await saveGeneratedContent(lessonId, {
       sheet: { summary: ['Nouveau.'], definitions: [] },
-      flashcards: [
-        { front: 'A', back: '1' },
-        { front: 'B', back: '2' },
-      ],
       quiz: [],
     })
 
     const sheets = await db.sheets.where('lessonId').equals(lessonId).toArray()
     expect(sheets.map((s) => s.content.summary)).toEqual([['Nouveau.']])
-    const cards = await db.cards.where('lessonId').equals(lessonId).toArray()
-    expect(cards.map((c) => c.front)).toEqual(['A', 'B'])
-    expect(cards.every((c) => c.due.getTime() <= Date.now())).toBe(true)
     expect(await db.quizQuestions.where('lessonId').equals(lessonId).count()).toBe(0)
   })
 })

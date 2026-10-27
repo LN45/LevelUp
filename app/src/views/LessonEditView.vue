@@ -21,16 +21,14 @@ async function load() {
     notFound.value = true
     return
   }
-  const [sheet, cards, quiz] = await Promise.all([
+  const [sheet, quiz] = await Promise.all([
     db.sheets.where('lessonId').equals(lessonId).first(),
-    db.cards.where('lessonId').equals(lessonId).toArray(),
     db.quizQuestions.where('lessonId').equals(lessonId).toArray(),
   ])
   draft.value = {
     title: lesson.title,
     sourceText: lesson.sourceText,
     sheet: sheet?.content ?? null,
-    cards,
     quiz,
   }
   savedSnapshot.value = JSON.stringify(draft.value)
@@ -58,7 +56,6 @@ const isValid = computed(() => {
     filled(d.title, d.sourceText) &&
     (d.sheet ? d.sheet.summary.some((sentence) => filled(sentence)) : true) &&
     (d.sheet?.definitions.every((item) => filled(item.term, item.definition)) ?? true) &&
-    d.cards.every((card) => filled(card.front, card.back)) &&
     d.quiz.every((question) => filled(question.question, question.explanation, ...question.choices))
   )
 })
@@ -76,7 +73,6 @@ function cleanEdits(d: LessonEdits): LessonEdits {
         definition: trim(definition),
       })),
     },
-    cards: d.cards.map((card) => ({ ...card, front: trim(card.front), back: trim(card.back) })),
     quiz: d.quiz.map((question) => ({
       ...question,
       question: trim(question.question),
@@ -200,25 +196,6 @@ onBeforeRouteLeave(async () => !isDirty.value || ((await leaveDialog.value?.open
         </div>
       </template>
 
-      <h2>Flashcards</h2>
-      <div v-for="(card, index) in draft.cards" :key="card.id" class="card item">
-        <div class="item-header">
-          <strong>Carte {{ index + 1 }}</strong>
-          <button
-            type="button"
-            class="btn remove"
-            :aria-label="`Supprimer la carte ${index + 1}`"
-            @click="draft.cards.splice(index, 1)"
-          >
-            🗑️
-          </button>
-        </div>
-        <label class="small-label" :for="`front-${card.id}`">Recto</label>
-        <textarea :id="`front-${card.id}`" v-model="card.front" class="text-input" rows="2" />
-        <label class="small-label" :for="`back-${card.id}`">Verso</label>
-        <textarea :id="`back-${card.id}`" v-model="card.back" class="text-input" rows="2" />
-      </div>
-
       <h2>Quiz</h2>
       <div v-for="(question, index) in draft.quiz" :key="question.id" class="card item">
         <div class="item-header">
@@ -287,8 +264,8 @@ onBeforeRouteLeave(async () => !isDirty.value || ((await leaveDialog.value?.open
     <ConfirmDialog ref="regenerate-dialog" confirm-label="Régénérer">
       <p><strong>Régénérer la fiche ?</strong></p>
       <p>
-        La fiche, les cartes et le quiz seront remplacés par une nouvelle version, préparée à partir
-        du texte du cours. Cela compte dans le quota du jour.
+        La fiche et le quiz seront remplacés par une nouvelle version, préparée à partir du texte du
+        cours. Cela compte dans le quota du jour.
       </p>
     </ConfirmDialog>
 

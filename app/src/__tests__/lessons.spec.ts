@@ -14,7 +14,6 @@ vi.mock('@/api', async (importOriginal) => ({
 
 const GENERATED: GeneratedContent = {
   sheet: { summary: ['Un **volcan** crache de la lave.'], definitions: [] },
-  flashcards: [{ front: 'Volcan ?', back: 'Une montagne.' }],
   quiz: [
     {
       type: 'true-false',
@@ -52,7 +51,7 @@ describe('génération d’une leçon', () => {
       text: 'Texte du cours',
     })
     expect(await db.sheets.where('lessonId').equals(id).count()).toBe(1)
-    expect(await db.cards.where('lessonId').equals(id).count()).toBe(1)
+    expect(await db.quizQuestions.where('lessonId').equals(id).count()).toBe(1)
     expect(store.generating.has(id)).toBe(false)
     expect(store.generationErrors.has(id)).toBe(false)
   })

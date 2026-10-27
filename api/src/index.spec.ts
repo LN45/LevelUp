@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { isGrounded, normalize, normalizeQuestion, shuffleChoices } from './generate'
+import { isGrounded, isTautology, normalize, normalizeQuestion, shuffleChoices } from './generate'
 import { app } from './index'
 
 const TOKEN = 'jeton-de-test'
@@ -15,7 +15,8 @@ function createEnv(aiResponse: unknown = JSON.stringify(EXTRACTION)) {
   const store = new Map<string, string>()
   return {
     APP_TOKEN: TOKEN,
-    AI_MODEL: 'modele-de-test',
+    EXTRACT_MODEL: 'modele-de-test',
+    GENERATE_MODEL: 'modele-de-generation',
     DAILY_LIMIT: '2',
     ALLOWED_ORIGINS: 'http://localhost:5173',
     AI: { run: vi.fn(async () => ({ response: aiResponse })) },
@@ -147,20 +148,28 @@ const COURSE = {
 
 const SOURCE = 'Un volcan est une montagne qui crache de la lave.'
 const sentence = (text: string, source = SOURCE) => ({ source, sentence: text })
-const card = (front: string) => ({ front, back: 'Réponse' })
-const mcq = (question: string, choices = ['La lave', 'La neige', 'Le sable'], answer = 0) => ({
+const mcq = (
+  question: string,
+  correct = 'La lave',
+  wrong = ['La neige', 'Le sable'],
+  source = SOURCE,
+) => ({
+  source,
   type: 'mcq' as const,
   question,
-  choices,
-  answer,
+  correct,
+  wrong,
   explanation: 'Bravo, c’est la lave.',
 })
-const trueFalse = (question: string, answer = 0) => ({
+const TRUE_STATEMENT = 'La lave sort par le cratère.'
+const FALSE_STATEMENT = 'La lave sort par la base du volcan.'
+const trueFalse = (wrong = [FALSE_STATEMENT]) => ({
+  source: SOURCE,
   type: 'true-false' as const,
-  question,
-  choices: ['Oui', 'Non'],
-  answer,
-  explanation: 'C’est écrit dans le cours.',
+  question: '',
+  correct: TRUE_STATEMENT,
+  wrong,
+  explanation: 'La lave sort par le cratère.',
 })
 
 const GENERATED = {
@@ -172,29 +181,26 @@ const GENERATED = {
       definition: 'Le trou en haut du volcan.',
     },
   ],
-  flashcards: [
-    card('Qu’est-ce qu’un volcan ?'),
-    card('Où sort la lave ?'),
-    card('Volcan endormi ?'),
-  ],
-  quiz: [mcq('Que crache un volcan ?'), mcq('Q2'), trueFalse('La lave sort par le cratère.')],
+  quiz: [mcq('Que crache un volcan ?'), mcq('Q2'), trueFalse()],
 }
 
 const generateRequest = (body: unknown = COURSE) => post(body, TOKEN, '/generate')
 
 describe('POST /generate', () => {
-  it('génère la fiche, les cartes et le quiz', async () => {
+  it('génère la fiche et le quiz', async () => {
     env = createEnv(JSON.stringify(GENERATED))
     const res = await generateRequest()
     expect(res.status).toBe(200)
     const body = (await res.json()) as ReturnType<typeof normalize>
 
     expect(body.sheet.summary).toEqual(['Un **volcan** crache de la lave.', 'B', 'C'])
-    expect(body.flashcards).toHaveLength(3)
     // La bonne réponse suit le mélange des choix
     const first = body.quiz[0]
     expect(first?.choices[first.answer]).toBe('La lave')
-    expect(body.quiz[2]).toMatchObject({ type: 'true-false', choices: ['Vrai', 'Faux'], answer: 0 })
+    // Vrai/faux : l'affirmation montrée correspond à la réponse attendue
+    const tf = body.quiz[2]
+    expect(tf?.choices).toEqual(['Vrai', 'Faux'])
+    expect(tf?.question).toBe(tf?.answer === 0 ? TRUE_STATEMENT : FALSE_STATEMENT)
 
     const [, inputs] = env.AI.run.mock.calls[0] as unknown as [
       string,
@@ -235,11 +241,32 @@ describe('POST /generate', () => {
 
 describe('nettoyage de la sortie de l’IA', () => {
   it('écarte les questions mal formées', () => {
-    expect(normalizeQuestion(mcq('Deux choix', ['A', 'B']))).toBeNull()
-    expect(normalizeQuestion(mcq('Doublon', ['A', 'a', 'B']))).toBeNull()
-    expect(normalizeQuestion(mcq('Hors limites', ['A', 'B', 'C'], 3))).toBeNull()
-    expect(normalizeQuestion(trueFalse('Vrai/faux impossible', 2))).toBeNull()
+    expect(normalizeQuestion(mcq('Deux choix', 'A', ['B']))).toBeNull()
+    expect(normalizeQuestion(mcq('Doublon', 'A', ['a !', 'B']))).toBeNull()
+    expect(normalizeQuestion({ ...mcq('Sans bonne réponse'), correct: ' ' })).toBeNull()
     expect(normalizeQuestion({ ...mcq('Sans explication'), explanation: ' ' })).toBeNull()
+    expect(normalizeQuestion(trueFalse([]))).toBeNull()
+    expect(normalizeQuestion(trueFalse([TRUE_STATEMENT]))).toBeNull()
+  })
+
+  it('construit les choix : la bonne réponse est toujours à la position annoncée', () => {
+    for (const value of [0, 0.3, 0.6, 0.99]) {
+      const question = normalizeQuestion(mcq('Que crache un volcan ?'), () => value)
+      expect(question?.choices).toHaveLength(3)
+      expect(question?.choices[question.answer]).toBe('La lave')
+    }
+  })
+
+  it('tire au hasard l’affirmation vraie ou fausse d’un vrai/faux', () => {
+    expect(normalizeQuestion(trueFalse(), () => 0.1)).toMatchObject({
+      question: TRUE_STATEMENT,
+      choices: ['Vrai', 'Faux'],
+      answer: 0,
+    })
+    expect(normalizeQuestion(trueFalse(), () => 0.9)).toMatchObject({
+      question: FALSE_STATEMENT,
+      answer: 1,
+    })
   })
 
   it('plafonne les quantités', () => {
@@ -248,15 +275,14 @@ describe('nettoyage de la sortie de l’IA', () => {
       {
         summary: many(sentence('Phrase')),
         definitions: many({ source: SOURCE, term: 'Mot', definition: 'Sens' }),
-        flashcards: many(card('Carte')),
-        quiz: many(mcq('Question')),
+        // Questions distinctes : les doublons seraient retirés
+        quiz: Array.from({ length: 12 }, (_, i) => mcq(`Question ${i}`)),
       },
       COURSE.text,
     )
     expect(result.sheet.summary).toHaveLength(6)
     expect(result.sheet.definitions).toHaveLength(6)
-    expect(result.flashcards).toHaveLength(10)
-    expect(result.quiz).toHaveLength(6)
+    expect(result.quiz).toHaveLength(8)
   })
 
   it('reconnaît une citation du cours malgré accents, ponctuation et Markdown', () => {
@@ -286,8 +312,69 @@ describe('nettoyage de la sortie de l’IA', () => {
     expect(result.sheet.definitions.map((d) => d.term)).toEqual(['Cratère'])
   })
 
+  it('repère une réponse qui se contente de répéter la question', () => {
+    expect(
+      isTautology(
+        'Qu’est-ce que des caractéristiques communes ?',
+        'Les caractéristiques communes entre individus.',
+      ),
+    ).toBe(true)
+    expect(isTautology('Qu’est-ce qu’un animal ovipare ?', 'Un animal ovipare.')).toBe(true)
+    // Réponses courtes mais utiles : gardées
+    expect(isTautology('Exemple d’animal ovipare ?', 'La poule.')).toBe(false)
+    expect(
+      isTautology('Volcan actif', 'Un volcan qui peut entrer en éruption à tout moment.'),
+    ).toBe(false)
+    expect(
+      isTautology(
+        'Le lion et le tigre sont-ils de la même espèce ?',
+        'Non. Ils se ressemblent, mais ne peuvent pas avoir d’enfants fertiles ensemble.',
+      ),
+    ).toBe(false)
+  })
+
+  it('écarte les QCM dont la bonne réponse répète la question', () => {
+    const result = normalize(
+      {
+        ...GENERATED,
+        quiz: [
+          ...GENERATED.quiz,
+          mcq('Qu’est-ce qu’un animal ovipare ?', 'Un animal ovipare', ['Un lion', 'Un chat']),
+        ],
+      },
+      COURSE.text,
+    )
+    expect(result.quiz).toHaveLength(GENERATED.quiz.length)
+  })
+
+  it('écarte les questions dont la citation est absente du cours', () => {
+    const invented = 'Les volcans fabriquent du chocolat chaud.'
+    const result = normalize(
+      {
+        ...GENERATED,
+        quiz: [...GENERATED.quiz, mcq('Que fabrique un volcan ?', undefined, undefined, invented)],
+      },
+      COURSE.text,
+    )
+    expect(result.quiz.map((q) => q.question)).not.toContain('Que fabrique un volcan ?')
+  })
+
+  it('retire les questions en double', () => {
+    const result = normalize(
+      { ...GENERATED, quiz: [...GENERATED.quiz, mcq('Que crache un volcan ?!')] },
+      COURSE.text,
+    )
+    expect(result.quiz).toHaveLength(GENERATED.quiz.length)
+  })
+
   it('mélange les choix sans perdre la bonne réponse', () => {
-    const question = { ...mcq('Q'), choices: ['A', 'B', 'C'], answer: 0 }
+    const question = {
+      type: 'mcq' as const,
+      question: 'Q',
+      choices: ['A', 'B', 'C'],
+      answer: 0,
+      explanation: 'E',
+    }
     // random() = 0 : chaque élément est échangé avec le premier
     const shuffled = shuffleChoices(question, () => 0)
     expect(shuffled.choices).toEqual(['B', 'C', 'A'])

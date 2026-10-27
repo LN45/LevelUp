@@ -6,6 +6,7 @@ export const FONTS = ['luciole', 'opendyslexic'] as const
 export const FONT_SIZES = [18, 20, 22, 24] as const
 export const LINE_HEIGHTS = [1.5, 1.8, 2.1] as const
 export const SPEECH_RATES = ['normal', 'slow'] as const
+export const AUTO_SPEAK = [false, true] as const
 export const NICKNAME_MAX_LENGTH = 30
 
 export interface Settings {
@@ -13,6 +14,8 @@ export interface Settings {
   fontSize: (typeof FONT_SIZES)[number]
   lineHeight: (typeof LINE_HEIGHTS)[number]
   speechRate: (typeof SPEECH_RATES)[number]
+  /** Lit automatiquement les questions du quiz quand elles s'affichent */
+  autoSpeak: boolean
   /** null : jamais demandé ; '' : l'élève a choisi « plus tard » */
   nickname: string | null
 }
@@ -22,6 +25,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fontSize: 20,
   lineHeight: 1.5,
   speechRate: 'normal',
+  autoSpeak: false,
   nickname: null,
 }
 
@@ -52,6 +56,7 @@ export function parseSettings(raw: string | null): Settings {
     fontSize: pick(data.fontSize, FONT_SIZES, DEFAULT_SETTINGS.fontSize),
     lineHeight: pick(data.lineHeight, LINE_HEIGHTS, DEFAULT_SETTINGS.lineHeight),
     speechRate: pick(data.speechRate, SPEECH_RATES, DEFAULT_SETTINGS.speechRate),
+    autoSpeak: pick(data.autoSpeak, AUTO_SPEAK, DEFAULT_SETTINGS.autoSpeak),
     nickname:
       typeof data.nickname === 'string'
         ? data.nickname.trim().slice(0, NICKNAME_MAX_LENGTH)

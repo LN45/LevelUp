@@ -65,6 +65,13 @@ function toggle() {
 onBeforeUnmount(() => {
   if (speaking.value) stop()
 })
+
+/** Lance la lecture (lecture automatique), sans l'arrêter si elle est déjà en cours */
+function play() {
+  if (supported && !speaking.value) toggle()
+}
+
+defineExpose({ play })
 </script>
 
 <template>

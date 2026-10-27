@@ -16,7 +16,10 @@
     },
   ],
   "vars": {
-    "AI_MODEL": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+    // Lecture des photos : modèle de vision rapide
+    "EXTRACT_MODEL": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+    // Fiche, cartes et quiz : texte seulement, modèle choisi pour la justesse des réponses
+    "GENERATE_MODEL": "@cf/mistralai/mistral-small-3.1-24b-instruct",
     "DAILY_LIMIT": "50",
     // Origines autorisées (séparées par des virgules) ; l'URL GitHub Pages sera ajoutée à l'étape 12
     "ALLOWED_ORIGINS": "http://localhost:5173",

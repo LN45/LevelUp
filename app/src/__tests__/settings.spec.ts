@@ -18,13 +18,21 @@ describe('parseSettings', () => {
       fontSize: 24,
       lineHeight: 2.1,
       speechRate: 'slow',
+      autoSpeak: true,
       nickname: 'Renard',
     }
     expect(parseSettings(JSON.stringify(stored))).toEqual(stored)
   })
 
   it('remplace chaque valeur invalide par sa valeur par défaut', () => {
-    const stored = { font: 'comic', fontSize: 12, lineHeight: '2', speechRate: 'fast', nickname: 3 }
+    const stored = {
+      font: 'comic',
+      fontSize: 12,
+      lineHeight: '2',
+      speechRate: 'fast',
+      autoSpeak: 'oui',
+      nickname: 3,
+    }
     expect(parseSettings(JSON.stringify(stored))).toEqual(DEFAULT_SETTINGS)
   })
 

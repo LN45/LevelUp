@@ -125,10 +125,10 @@ async function askRemove(subject: Subject) {
           <strong>Supprimer « {{ pending.subject.name }} » ?</strong>
         </p>
         <p v-if="pending.lessonCount === 1">
-          Sa leçon, avec sa fiche, ses cartes et ses quiz, sera aussi effacée.
+          Sa leçon, avec sa fiche et son quiz, sera aussi effacée.
         </p>
         <p v-else-if="pending.lessonCount > 1">
-          Ses {{ pending.lessonCount }} leçons, avec leurs fiches, cartes et quiz, seront aussi
+          Ses {{ pending.lessonCount }} leçons, avec leurs fiches et leurs quiz, seront aussi
           effacées.
         </p>
         <p v-else>Elle ne contient aucune leçon.</p>

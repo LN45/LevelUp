@@ -14,13 +14,16 @@ export class AiError extends Error {
 }
 
 // Workers AI type run() par nom de modèle littéral ; ici le modèle vient de la configuration
-type RunModel = (model: string, inputs: object) => Promise<{ response?: unknown }>
+type RunModel = (
+  model: string,
+  inputs: object,
+) => Promise<{ response?: unknown; choices?: { message?: { content?: unknown } }[] }>
 
 export async function generateJson<T extends z.ZodType>(
   env: Env,
-  options: { system: string; prompt: string; images?: ImageInput[]; schema: T },
+  options: { model: string; system: string; prompt: string; images?: ImageInput[]; schema: T },
 ): Promise<z.infer<T>> {
-  const { system, prompt, images = [], schema } = options
+  const { model, system, prompt, images = [], schema } = options
   const content = [
     { type: 'text', text: prompt },
     ...images.map((image) => ({
@@ -31,7 +34,7 @@ export async function generateJson<T extends z.ZodType>(
 
   let response: unknown
   try {
-    const result = await (env.AI.run as RunModel)(env.AI_MODEL, {
+    const result = await (env.AI.run as RunModel)(model, {
       messages: [
         { role: 'system', content: system },
         { role: 'user', content },
@@ -41,7 +44,8 @@ export async function generateJson<T extends z.ZodType>(
       // 0 : on veut une recopie, pas de la créativité
       temperature: 0,
     })
-    response = result.response
+    // Selon le modèle, le texte est dans « response » ou au format OpenAI « choices »
+    response = result.response ?? result.choices?.[0]?.message?.content
   } catch (error) {
     // Message technique du fournisseur (quota, modèle inconnu…), sans contenu de cours
     throw new AiError(`Workers AI : ${error instanceof Error ? error.message : 'erreur inconnue'}`)

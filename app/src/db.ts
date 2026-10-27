@@ -31,15 +31,6 @@ export interface Sheet {
   content: SheetContent
 }
 
-export interface Card {
-  id: number
-  lessonId: number
-  front: string
-  back: string
-  /** Prochaine révision (état FSRS complet ajouté à l'étape 9) */
-  due: Date
-}
-
 export interface QuizQuestion {
   id: number
   lessonId: number
@@ -79,7 +70,6 @@ export const db = new Dexie('levelup') as Dexie & {
   subjects: EntityTable<Subject, 'id'>
   lessons: EntityTable<Lesson, 'id'>
   sheets: EntityTable<Sheet, 'id'>
-  cards: EntityTable<Card, 'id'>
   quizQuestions: EntityTable<QuizQuestion, 'id'>
 }
 
@@ -116,6 +106,9 @@ db.version(2)
       }),
   )
 
+// Version 3 : les flashcards sont abandonnées, leur table est supprimée
+db.version(3).stores({ cards: null })
+
 db.on('populate', async (tx) => {
   const createdAt = new Date()
   await tx.table('subjects').bulkAdd(
@@ -131,11 +124,10 @@ db.on('populate', async (tx) => {
 /** Ce que /generate produit pour une leçon */
 export interface GeneratedContent {
   sheet: SheetContent
-  flashcards: Pick<Card, 'front' | 'back'>[]
   quiz: Omit<QuizQuestion, 'id' | 'lessonId'>[]
 }
 
-const contentTables = () => [db.sheets, db.cards, db.quizQuestions]
+const contentTables = () => [db.sheets, db.quizQuestions]
 
 /** À appeler dans une transaction qui inclut contentTables() */
 async function deleteContent(lessonIds: number[]): Promise<void> {
@@ -144,16 +136,14 @@ async function deleteContent(lessonIds: number[]): Promise<void> {
   )
 }
 
-/** Remplace la fiche, les cartes et les questions d'une leçon par celles générées */
+/** Remplace la fiche et les questions d'une leçon par celles générées */
 export async function saveGeneratedContent(
   lessonId: number,
   generated: GeneratedContent,
 ): Promise<void> {
-  const due = new Date()
   await db.transaction('rw', contentTables(), async () => {
     await deleteContent([lessonId])
     await db.sheets.add({ lessonId, content: generated.sheet })
-    await db.cards.bulkAdd(generated.flashcards.map((card) => ({ ...card, lessonId, due })))
     await db.quizQuestions.bulkAdd(generated.quiz.map((question) => ({ ...question, lessonId })))
   })
 }
@@ -163,38 +153,30 @@ export interface LessonEdits {
   sourceText: string
   /** null si la fiche n'a pas encore été générée */
   sheet: SheetContent | null
-  cards: Card[]
   quiz: QuizQuestion[]
 }
 
 /**
- * Enregistre les corrections d'un adulte. Les cartes et questions gardées conservent leur id
- * (et donc leur état de révision) ; celles qui ne sont plus dans la liste sont supprimées.
+ * Enregistre les corrections d'un adulte. Les questions gardées conservent leur id (et donc
+ * leur état de révision) ; celles qui ne sont plus dans la liste sont supprimées.
  */
 export async function saveLessonEdits(lessonId: number, edits: LessonEdits): Promise<void> {
-  const keptCards = new Set(edits.cards.map((card) => card.id))
   const keptQuestions = new Set(edits.quiz.map((question) => question.id))
   await db.transaction('rw', [db.lessons, ...contentTables()], async () => {
     await db.lessons.update(lessonId, { title: edits.title, sourceText: edits.sourceText })
     if (edits.sheet) {
       await db.sheets.where('lessonId').equals(lessonId).modify({ content: edits.sheet })
     }
-    await db.cards
-      .where('lessonId')
-      .equals(lessonId)
-      .filter((card) => !keptCards.has(card.id))
-      .delete()
     await db.quizQuestions
       .where('lessonId')
       .equals(lessonId)
       .filter((question) => !keptQuestions.has(question.id))
       .delete()
-    await db.cards.bulkPut(edits.cards)
     await db.quizQuestions.bulkPut(edits.quiz)
   })
 }
 
-/** Supprime une leçon avec sa fiche, ses cartes et ses questions */
+/** Supprime une leçon avec sa fiche et ses questions */
 export async function deleteLesson(lessonId: number): Promise<void> {
   await db.transaction('rw', [db.lessons, ...contentTables()], async () => {
     await deleteContent([lessonId])
@@ -202,7 +184,7 @@ export async function deleteLesson(lessonId: number): Promise<void> {
   })
 }
 
-/** Supprime une matière avec ses leçons, fiches, cartes et questions */
+/** Supprime une matière avec ses leçons, fiches et questions */
 export async function deleteSubject(subjectId: number): Promise<void> {
   await db.transaction('rw', [db.subjects, db.lessons, ...contentTables()], async () => {
     const lessonIds = await db.lessons.where('subjectId').equals(subjectId).primaryKeys()

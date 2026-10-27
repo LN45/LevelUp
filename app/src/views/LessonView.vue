@@ -19,13 +19,12 @@ const justSaved = history.state?.justSaved === true
 async function loadLesson() {
   const lesson = await db.lessons.get(lessonId)
   if (!lesson) return null
-  const [subject, sheet, cardCount, questionCount] = await Promise.all([
+  const [subject, sheet, questionCount] = await Promise.all([
     db.subjects.get(lesson.subjectId),
     db.sheets.where('lessonId').equals(lessonId).first(),
-    db.cards.where('lessonId').equals(lessonId).count(),
     db.quizQuestions.where('lessonId').equals(lessonId).count(),
   ])
-  return { lesson, subject, sheet, cardCount, questionCount }
+  return { lesson, subject, sheet, questionCount }
 }
 
 // undefined : chargement ; null : leçon introuvable
@@ -48,7 +47,7 @@ watch(
 
 const waitingMessage = computed(
   () =>
-    `${justSaved ? 'Leçon enregistrée ! ' : ''}Je prépare ta fiche, tes cartes et ton quiz. Ça prend environ une minute.`,
+    `${justSaved ? 'Leçon enregistrée ! ' : ''}Je prépare ta fiche et ton quiz. Ça prend environ une minute.`,
 )
 
 const sheet = computed(() => data.value?.sheet?.content)
@@ -123,10 +122,13 @@ const lines = computed(() => courseLines(data.value?.lesson.sourceText ?? ''))
 
       <div class="practice">
         <h2>Pour t’entraîner</h2>
-        <p>
-          {{ data.cardCount }} cartes et {{ data.questionCount }} questions t’attendent. Bientôt ici
-          !
-        </p>
+        <RouterLink
+          v-if="data.questionCount"
+          :to="{ name: 'quiz', params: { id: data.lesson.id } }"
+          class="btn btn--primary practice-action"
+        >
+          ❓ Faire le quiz ({{ data.questionCount }} questions)
+        </RouterLink>
       </div>
     </template>
 
@@ -225,8 +227,14 @@ h3 {
   margin: 0;
 }
 
-.practice p {
-  margin: var(--space-s) 0 0;
+.practice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s);
+  margin-top: var(--space-m);
+}
+.practice-action {
+  min-height: 3.5rem;
 }
 
 .course summary {
