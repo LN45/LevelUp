@@ -59,7 +59,13 @@ describe('sauvegarde', () => {
     const content = await createBackup(settings)
 
     await db.lessons.clear()
-    await db.subjects.add({ name: 'À effacer', icon: '🦊', color: '#000', createdAt: NOW })
+    await db.subjects.add({
+      name: 'À effacer',
+      icon: '🦊',
+      color: '#000',
+      order: 99,
+      createdAt: NOW,
+    })
 
     const backup = parseBackup(content)
     if (!backup) throw new Error('sauvegarde refusée')
@@ -93,6 +99,16 @@ describe('sauvegarde', () => {
     await expect(restoreBackup(backup)).rejects.toThrow()
 
     expect(await snapshot()).toEqual(before)
+  })
+
+  it('restaure une ancienne sauvegarde sans ordre des matières, dans l’ordre du fichier', async () => {
+    const valid = JSON.parse(await createBackup(DEFAULT_SETTINGS))
+    // order: undefined disparaît du JSON, comme dans une sauvegarde faite avant l'ordre modifiable
+    const subjects = [...valid.subjects].reverse().map((s) => ({ ...s, order: undefined }))
+    const backup = parseBackup(JSON.stringify({ ...valid, subjects }))
+    expect(backup?.subjects.map((s) => [s.name, s.order])).toEqual(
+      subjects.map((s, index) => [s.name, index]),
+    )
   })
 
   it('remplace des réglages invalides par les valeurs par défaut', async () => {

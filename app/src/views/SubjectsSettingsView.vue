@@ -67,25 +67,47 @@ async function askRemove(subject: Subject) {
 
     <h2>Mes matières</h2>
     <ul class="list">
-      <li v-for="subject in subjects" :key="subject.id" class="row">
-        <span class="icon" :style="{ borderColor: subject.color }" aria-hidden="true">
-          {{ subject.icon }}
-        </span>
-        <input
-          class="text-input"
-          :value="subject.name"
-          :maxlength="SUBJECT_NAME_MAX_LENGTH"
-          :aria-label="`Nom de la matière ${subject.name}`"
-          @change="rename(subject, $event)"
-        />
-        <button
-          type="button"
-          class="btn remove"
-          :aria-label="`Supprimer ${subject.name}`"
-          @click="askRemove(subject)"
-        >
-          🗑️
-        </button>
+      <li v-for="(subject, index) in subjects" :key="subject.id" class="card row">
+        <div class="row-name">
+          <span class="icon" :style="{ borderColor: subject.color }" aria-hidden="true">
+            {{ subject.icon }}
+          </span>
+          <input
+            class="text-input"
+            :value="subject.name"
+            :maxlength="SUBJECT_NAME_MAX_LENGTH"
+            :aria-label="`Nom de la matière ${subject.name}`"
+            @change="rename(subject, $event)"
+          />
+        </div>
+        <div class="row-actions">
+          <button
+            type="button"
+            class="btn icon-btn"
+            :disabled="index === 0"
+            :aria-label="`Monter ${subject.name}`"
+            @click="store.move(subject.id, -1)"
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            class="btn icon-btn"
+            :disabled="index === (subjects?.length ?? 0) - 1"
+            :aria-label="`Descendre ${subject.name}`"
+            @click="store.move(subject.id, 1)"
+          >
+            ↓
+          </button>
+          <button
+            type="button"
+            class="btn icon-btn remove"
+            :aria-label="`Supprimer ${subject.name}`"
+            @click="askRemove(subject)"
+          >
+            🗑️
+          </button>
+        </div>
       </li>
     </ul>
 
@@ -169,6 +191,13 @@ h2 {
   list-style: none;
 }
 .row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-s);
+  padding: var(--space-s);
+}
+.row-name,
+.row-actions {
   display: flex;
   align-items: center;
   gap: var(--space-s);
@@ -184,10 +213,14 @@ h2 {
   background: var(--color-surface);
   font-size: 1.3rem;
 }
-.remove {
+.icon-btn {
   flex-shrink: 0;
   width: var(--tap-size);
   padding: 0;
+}
+/* Supprimer à l'écart des flèches, pour éviter un toucher par erreur */
+.remove {
+  margin-left: auto;
 }
 
 .catalog {

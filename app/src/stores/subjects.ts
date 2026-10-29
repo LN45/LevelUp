@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 
 import { useLiveQuery } from '@/composables/useLiveQuery'
-import { db, deleteSubject, type NewSubject, type Subject } from '@/db'
+import { db, deleteSubject, orderedSubjects, type NewSubject, type Subject } from '@/db'
 
 export const SUBJECT_NAME_MAX_LENGTH = 40
 
@@ -13,7 +13,7 @@ export const isSameSubjectName = (a: string, b: string) =>
 
 export const useSubjectsStore = defineStore('subjects', () => {
   // undefined tant que la base n'a pas répondu
-  const subjects = useLiveQuery<Subject[] | undefined>(() => db.subjects.toArray(), undefined)
+  const subjects = useLiveQuery<Subject[] | undefined>(orderedSubjects, undefined)
 
   /** Nettoie le nom et vérifie qu'il est libre */
   function checkName(name: string, ignoreId?: number): { name: string } | { error: NameError } {
@@ -28,8 +28,28 @@ export const useSubjectsStore = defineStore('subjects', () => {
   async function add(subject: NewSubject): Promise<NameError | null> {
     const checked = checkName(subject.name)
     if ('error' in checked) return checked.error
-    await db.subjects.add({ ...subject, name: checked.name, createdAt: new Date() })
+    // Une nouvelle matière se place en fin de liste
+    const last = await db.subjects.orderBy('order').last()
+    await db.subjects.add({
+      ...subject,
+      name: checked.name,
+      order: (last?.order ?? -1) + 1,
+      createdAt: new Date(),
+    })
     return null
+  }
+
+  /** Échange la place de la matière avec sa voisine (au-dessus ou en dessous) */
+  async function move(id: number, offset: -1 | 1): Promise<void> {
+    await db.transaction('rw', db.subjects, async () => {
+      const list = await orderedSubjects()
+      const index = list.findIndex((s) => s.id === id)
+      const subject = list[index]
+      const neighbour = list[index + offset]
+      if (!subject || !neighbour) return
+      await db.subjects.update(subject.id, { order: neighbour.order })
+      await db.subjects.update(neighbour.id, { order: subject.order })
+    })
   }
 
   async function rename(id: number, newName: string): Promise<NameError | null> {
@@ -43,5 +63,5 @@ export const useSubjectsStore = defineStore('subjects', () => {
     return db.lessons.where('subjectId').equals(id).count()
   }
 
-  return { subjects, add, rename, remove: deleteSubject, countLessons }
+  return { subjects, add, rename, move, remove: deleteSubject, countLessons }
 })

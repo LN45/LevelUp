@@ -7,6 +7,7 @@ import {
   db,
   deleteLesson,
   deleteSubject,
+  orderedSubjects,
   saveGeneratedContent,
   saveLessonEdits,
 } from '@/db'
@@ -145,6 +146,21 @@ describe('base locale', () => {
     await db.open()
     expect(db.tables.map((table) => table.name)).not.toContain('cards')
     expect((await db.lessons.toArray()).map((lesson) => lesson.title)).toEqual(['Gardée'])
+  })
+
+  it('range les matières existantes dans leur ordre de création (version 6)', async () => {
+    db.close()
+    await Dexie.delete('levelup')
+    const v5 = new Dexie('levelup')
+    v5.version(5).stores({ subjects: '++id, &name' })
+    await v5.table('subjects').bulkAdd([{ name: 'Maths' }, { name: 'Anglais' }])
+    v5.close()
+
+    await db.open()
+    expect((await orderedSubjects()).map((s) => [s.name, s.order])).toEqual([
+      ['Maths', 0],
+      ['Anglais', 1],
+    ])
   })
 
   it('remplace le contenu généré d’une leçon', async () => {

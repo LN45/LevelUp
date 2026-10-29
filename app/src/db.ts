@@ -8,6 +8,8 @@ export interface Subject {
   name: string
   icon: string
   color: string
+  /** Position dans la liste des matières, choisie dans les réglages */
+  order: number
   createdAt: Date
 }
 
@@ -186,17 +188,36 @@ db.version(5)
     await tx.table('xp').bulkAdd(entries)
   })
 
+// Version 6 : ordre des matières modifiable, en gardant l'ordre de création
+db.version(6)
+  .stores({ subjects: '++id, &name, order' })
+  .upgrade((tx) => {
+    let order = 0
+    return tx
+      .table('subjects')
+      .toCollection()
+      .modify((subject: { order?: number }) => {
+        subject.order = order++
+      })
+  })
+
 db.on('populate', async (tx) => {
   const createdAt = new Date()
   await tx.table('subjects').bulkAdd(
-    SUBJECT_CATALOG.filter((s) => s.preset).map(({ name, icon, color }) => ({
+    SUBJECT_CATALOG.filter((s) => s.preset).map(({ name, icon, color }, order) => ({
       name,
       icon,
       color,
+      order,
       createdAt,
     })),
   )
 })
+
+/** Matières dans l'ordre choisi par l'élève */
+export function orderedSubjects(): Promise<Subject[]> {
+  return db.subjects.orderBy('order').toArray()
+}
 
 /** Ce que /generate produit pour une leçon */
 export interface GeneratedContent {

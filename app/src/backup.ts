@@ -41,7 +41,21 @@ const backupSchema = z.object({
   format: z.literal(BACKUP_FORMAT),
   version: z.literal(BACKUP_VERSION),
   settings: z.unknown().transform(normalizeSettings),
-  subjects: z.array(z.object({ id, name: text, icon: text, color: text, createdAt: date })),
+  subjects: z
+    .array(
+      z.object({
+        id,
+        name: text,
+        icon: text,
+        color: text,
+        // Absent des sauvegardes faites avant l'ordre modifiable : on garde l'ordre du fichier
+        order: z.number().int().optional(),
+        createdAt: date,
+      }),
+    )
+    .transform((subjects) =>
+      subjects.map((subject, index) => ({ ...subject, order: subject.order ?? index })),
+    ),
   lessons: z.array(z.object({ id, subjectId: id, title: text, sourceText: text, createdAt: date })),
   sheets: z.array(
     z.object({

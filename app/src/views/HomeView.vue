@@ -8,7 +8,7 @@ import ProgressBar from '@/components/ProgressBar.vue'
 import SpeakButton from '@/components/SpeakButton.vue'
 import { useLiveQuery } from '@/composables/useLiveQuery'
 import { usePwa } from '@/composables/usePwa'
-import { db } from '@/db'
+import { db, orderedSubjects } from '@/db'
 import { useProgressStore } from '@/stores/progress'
 import { NICKNAME_MAX_LENGTH, useSettingsStore } from '@/stores/settings'
 import { endOfDay, groupDueByLesson, type DueGroup } from '@/utils/review'
@@ -30,7 +30,7 @@ const dueGroups = useLiveQuery(
     const [due, lessons, subjects] = await Promise.all([
       db.quizQuestions.where('due').belowOrEqual(endOfDay()).toArray(),
       db.lessons.toArray(),
-      db.subjects.toArray(),
+      orderedSubjects(),
     ])
     return groupDueByLesson(due, lessons, subjects)
   },

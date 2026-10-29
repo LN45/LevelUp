@@ -3,7 +3,7 @@ import { ref, useTemplateRef } from 'vue'
 
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useLiveQuery } from '@/composables/useLiveQuery'
-import { db, type Lesson } from '@/db'
+import { db, orderedSubjects, type Lesson } from '@/db'
 import { useLessonsStore } from '@/stores/lessons'
 import { formatDate } from '@/utils/text'
 
@@ -12,7 +12,7 @@ const lessonsStore = useLessonsStore()
 /** Leçons regroupées par matière, les plus récentes d'abord */
 const groups = useLiveQuery(async () => {
   const [subjects, lessons] = await Promise.all([
-    db.subjects.toArray(),
+    orderedSubjects(),
     db.lessons.orderBy('createdAt').reverse().toArray(),
   ])
   return subjects

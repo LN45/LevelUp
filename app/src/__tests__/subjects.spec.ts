@@ -21,8 +21,36 @@ describe('store des matières', () => {
   it('charge les matières et suit les changements de la base', async () => {
     const store = await loadedStore()
     const count = store.subjects?.length ?? 0
-    await db.subjects.add({ name: 'Japonais', icon: '🦊', color: '#000', createdAt: new Date() })
+    await db.subjects.add({
+      name: 'Japonais',
+      icon: '🦊',
+      color: '#000',
+      order: 99,
+      createdAt: new Date(),
+    })
     await vi.waitFor(() => expect(store.subjects?.length).toBe(count + 1))
+  })
+
+  it('ajoute une nouvelle matière en fin de liste', async () => {
+    const store = await loadedStore()
+    await store.add({ name: 'Japonais', icon: '🦊', color: '#000' })
+    await vi.waitFor(() => expect(store.subjects?.map((s) => s.name).pop()).toBe('Japonais'))
+  })
+
+  it('change l’ordre des matières, sans rien faire aux bords de la liste', async () => {
+    const store = await loadedStore()
+    const names = () => store.subjects?.map((s) => s.name) ?? []
+    const [first, second] = names()
+    const firstId = store.subjects?.[0]?.id ?? 0
+
+    await store.move(firstId, -1)
+    await store.move(firstId, 1)
+    await vi.waitFor(() => expect(names().slice(0, 2)).toEqual([second, first]))
+
+    const lastId = store.subjects?.map((s) => s.id).pop() ?? 0
+    const before = names()
+    await store.move(lastId, 1)
+    expect(names()).toEqual(before)
   })
 
   it('refuse un nom vide ou déjà pris, sans tenir compte des majuscules', async () => {
