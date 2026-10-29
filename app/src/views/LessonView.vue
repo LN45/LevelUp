@@ -2,6 +2,7 @@
 import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
+import CourseReader from '@/components/CourseReader.vue'
 import KitsuneMascot from '@/components/KitsuneMascot.vue'
 import ProgressBar from '@/components/ProgressBar.vue'
 import RichText from '@/components/RichText.vue'
@@ -10,7 +11,6 @@ import { useLiveQuery } from '@/composables/useLiveQuery'
 import { db } from '@/db'
 import { useLessonsStore } from '@/stores/lessons'
 import { progressByLesson, progressText } from '@/utils/progress'
-import { courseLines } from '@/utils/text'
 
 const lessonId = Number(useRoute().params.id)
 const lessonsStore = useLessonsStore()
@@ -57,7 +57,6 @@ const summarySpeech = computed(() => sheet.value?.summary.join(' ') ?? '')
 const definitionsSpeech = computed(
   () => sheet.value?.definitions.map((d) => `${d.term} : ${d.definition}`).join('. ') ?? '',
 )
-const lines = computed(() => courseLines(data.value?.lesson.sourceText ?? ''))
 </script>
 
 <template>
@@ -74,6 +73,8 @@ const lines = computed(() => courseLines(data.value?.lesson.sourceText ?? ''))
       <h1>{{ data.lesson.title }}</h1>
       <SpeakButton :text="data.lesson.title" />
     </div>
+
+    <CourseReader :text="data.lesson.sourceText" />
 
     <div v-if="!sheet && error" class="status">
       <KitsuneMascot class="mascot" mood="encouraging" />
@@ -136,15 +137,6 @@ const lines = computed(() => courseLines(data.value?.lesson.sourceText ?? ''))
         </template>
       </div>
     </template>
-
-    <details class="course">
-      <summary>Le texte du cours</summary>
-      <template v-for="(line, index) in lines" :key="index">
-        <h3 v-if="line.kind === 'title'">{{ line.text }}</h3>
-        <p v-else-if="line.kind === 'item'" class="item">• {{ line.text }}</p>
-        <p v-else>{{ line.text }}</p>
-      </template>
-    </details>
   </section>
 
   <section v-else-if="data === null" class="lesson">
@@ -244,20 +236,5 @@ h3 {
 }
 .practice-action {
   min-height: 3.5rem;
-}
-
-.course summary {
-  min-height: var(--tap-size);
-  font-weight: 700;
-  cursor: pointer;
-}
-.course h3 {
-  margin-top: var(--space-m);
-}
-.course p {
-  margin: var(--space-xs) 0;
-}
-.course .item {
-  padding-left: var(--space-m);
 }
 </style>

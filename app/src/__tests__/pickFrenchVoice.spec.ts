@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { pickFrenchVoice } from '@/components/SpeakButton.vue'
+import { pickFrenchVoice } from '@/composables/useSpeech'
 
 const voice = (name: string, lang: string, localService = false) =>
   ({ name, lang, localService }) as SpeechSynthesisVoice

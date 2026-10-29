@@ -1,74 +1,18 @@
-<script lang="ts">
-import { ref } from 'vue'
-
-// Une seule lecture à la fois dans toute l'appli
-const speakingId = ref<string | null>(null)
-let currentUtterance: SpeechSynthesisUtterance | null = null
-
-const RATES = { normal: 1, slow: 0.75 } as const
-
-/** Meilleure voix française disponible : fr-FR locale, puis fr-FR, puis toute voix fr-* */
-export function pickFrenchVoice(
-  voices: readonly SpeechSynthesisVoice[],
-): SpeechSynthesisVoice | undefined {
-  const lang = (voice: SpeechSynthesisVoice) => voice.lang.replace('_', '-').toLowerCase()
-  const frFR = voices.filter((voice) => lang(voice) === 'fr-fr')
-  return (
-    frFR.find((voice) => voice.localService) ??
-    frFR[0] ??
-    voices.find((voice) => lang(voice).startsWith('fr'))
-  )
-}
-</script>
-
 <script setup lang="ts">
-import { computed, onBeforeUnmount, useId } from 'vue'
-
-import { useSettingsStore } from '@/stores/settings'
-import { plainText } from '@/utils/text'
+import { speechSupported, useSpeech } from '@/composables/useSpeech'
 
 const { text } = defineProps<{ text: string }>()
 
-const settingsStore = useSettingsStore()
-const id = useId()
-const supported = typeof window !== 'undefined' && 'speechSynthesis' in window
-const speaking = computed(() => speakingId.value === id)
-
-function stop() {
-  currentUtterance = null
-  speakingId.value = null
-  window.speechSynthesis.cancel()
-}
+const { speaking, speak, stop } = useSpeech()
 
 function toggle() {
-  const wasSpeaking = speaking.value
-  stop()
-  if (wasSpeaking) return
-
-  const utterance = new SpeechSynthesisUtterance(plainText(text))
-  utterance.lang = 'fr-FR'
-  utterance.rate = RATES[settingsStore.settings.speechRate]
-  const voice = pickFrenchVoice(window.speechSynthesis.getVoices())
-  if (voice) utterance.voice = voice
-  utterance.onend = utterance.onerror = () => {
-    if (currentUtterance === utterance) {
-      currentUtterance = null
-      speakingId.value = null
-    }
-  }
-
-  currentUtterance = utterance
-  speakingId.value = id
-  window.speechSynthesis.speak(utterance)
-}
-
-onBeforeUnmount(() => {
   if (speaking.value) stop()
-})
+  else speak(text)
+}
 
 /** Lance la lecture (lecture automatique), sans l'arrêter si elle est déjà en cours */
 function play() {
-  if (supported && !speaking.value) toggle()
+  if (!speaking.value) speak(text)
 }
 
 defineExpose({ play })
@@ -76,7 +20,7 @@ defineExpose({ play })
 
 <template>
   <button
-    v-if="supported"
+    v-if="speechSupported"
     type="button"
     class="speak"
     :class="{ 'speak--active': speaking }"
