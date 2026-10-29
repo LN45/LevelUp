@@ -95,4 +95,12 @@ describe('mise en forme du texte', () => {
       { kind: 'paragraph', text: 'Un paragraphe.' },
     ])
   })
+
+  it('garde le gras dans les lignes du cours', () => {
+    expect(courseLines('# Les **volcans**\n- la **lave**\n**Magma** : roche fondue.')).toEqual([
+      { kind: 'title', text: 'Les **volcans**' },
+      { kind: 'item', text: 'la **lave**' },
+      { kind: 'paragraph', text: '**Magma** : roche fondue.' },
+    ])
+  })
 })

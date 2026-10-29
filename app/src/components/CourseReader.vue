@@ -2,6 +2,7 @@
 import { usePreferredReducedMotion } from '@vueuse/core'
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue'
 
+import RichText from '@/components/RichText.vue'
 import { speechSupported, useSpeech } from '@/composables/useSpeech'
 import { courseLines } from '@/utils/text'
 
@@ -109,7 +110,7 @@ watch(current, async (index) => {
       }"
       @click="onLineClick(index)"
     >
-      {{ line.kind === 'item' ? '• ' : '' }}{{ line.text }}
+      {{ line.kind === 'item' ? '• ' : '' }}<RichText :text="line.text" />
     </component>
   </details>
 </template>

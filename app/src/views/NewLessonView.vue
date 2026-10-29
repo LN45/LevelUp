@@ -281,6 +281,7 @@ onBeforeUnmount(() => photos.value.forEach((photo) => URL.revokeObjectURL(photo.
         />
         <p id="lesson-text-help" class="help">
           Les lignes qui commencent par # sont des titres, celles qui commencent par - des listes.
+          Les mots entre **deux étoiles** s’affichent en gras.
         </p>
       </div>
 
