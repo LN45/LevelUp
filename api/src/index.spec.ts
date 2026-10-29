@@ -96,7 +96,7 @@ describe('API', () => {
   })
 
   it('extrait le texte et le titre du cours', async () => {
-    const res = await post({ images: [IMAGE, IMAGE] })
+    const res = await post({ images: [IMAGE] })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ title: 'Les volcans', text: '# Les volcans\n\nUn volcan…' })
 
@@ -106,6 +106,30 @@ describe('API', () => {
     ]
     expect(model).toBe('modele-de-test')
     expect(JSON.stringify(inputs.messages[1]?.content)).toContain('data:image/jpeg;base64,aGVsbG8=')
+  })
+
+  it('lit chaque photo séparément et garde l’ordre des pages, en ne comptant qu’un quota', async () => {
+    const page = (data: string) => ({ mediaType: 'image/jpeg', data })
+    const pages: Record<string, unknown> = {
+      'cGFnZTE=': { legible: true, title: 'Les volcans', lines: ['# Les volcans', 'Page 1'] },
+      'cGFnZTI=': { legible: false, title: '', lines: [] },
+      'cGFnZTM=': { legible: true, title: 'Suite', lines: ['Page 3'] },
+    }
+    env.AI.run = vi
+      .fn()
+      .mockImplementation(async (_model: string, inputs: { messages: { content: unknown }[] }) => {
+        const content = JSON.stringify(inputs.messages[1]?.content)
+        const key = Object.keys(pages).find((data) => content.includes(data))!
+        return { response: JSON.stringify(pages[key]) }
+      })
+
+    const res = await post({ images: Object.keys(pages).map(page) })
+    expect(await res.json()).toEqual({
+      title: 'Les volcans',
+      text: '# Les volcans\nPage 1\n\nPage 3',
+    })
+    expect(env.AI.run).toHaveBeenCalledTimes(3)
+    expect(await env.QUOTA.get(`quota:${new Date().toISOString().slice(0, 10)}`)).toBe('1')
   })
 
   it('signale un cours illisible', async () => {
