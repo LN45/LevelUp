@@ -10,7 +10,7 @@ import {
 } from 'vue'
 
 import { useSettingsStore } from '@/stores/settings'
-import { speechSegments } from '@/utils/text'
+import { englishSpeech, speechSegments } from '@/utils/text'
 
 // Une seule lecture à la fois dans toute l'appli
 const speakingId = ref<string | null>(null)
@@ -82,7 +82,9 @@ export function useSpeech() {
     // Une lecture par morceau : une voix ne change pas de langue en cours de phrase
     const utterances = speechSegments(text).map((segment) => {
       const lang = (segment.foreign && foreignLanguage.value) || 'fr-FR'
-      const utterance = new SpeechSynthesisUtterance(segment.text)
+      const utterance = new SpeechSynthesisUtterance(
+        lang.startsWith('en') ? englishSpeech(segment.text) : segment.text,
+      )
       utterance.lang = lang
       utterance.rate = RATES[settingsStore.settings.speechRate]
       const voice = pickVoice(voices, lang)

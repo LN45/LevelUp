@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, generateLesson } from '@/api'
 import { db, type GeneratedContent } from '@/db'
 import { useLessonsStore } from '@/stores/lessons'
-import { courseLines, speechSegments, splitRich } from '@/utils/text'
+import { courseLines, englishNumber, englishSpeech, speechSegments, splitRich } from '@/utils/text'
 
 vi.mock('@/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api')>()),
@@ -114,6 +114,30 @@ describe('mise en forme du texte', () => {
       { text: ' et ', foreign: false },
       { text: 'Goodbye', foreign: true },
     ])
+  })
+
+  it('écrit les nombres en anglais', () => {
+    expect([0, 7, 11, 21, 40, 100, 342, 1500, 2026].map(englishNumber)).toEqual([
+      'zero',
+      'seven',
+      'eleven',
+      'twenty one',
+      'forty',
+      'one hundred',
+      'three hundred and forty two',
+      'one thousand five hundred',
+      'two thousand and twenty six',
+    ])
+  })
+
+  it('prépare le texte anglais pour la voix : nombres en lettres et « I »', () => {
+    expect(englishSpeech('I am 11. I’m happy, I said.')).toBe(
+      'eye am eleven. eye’m happy, eye said.',
+    )
+    // Nombres à virgule, heures et ordinaux laissés au moteur vocal ; mots contenant un I inchangés
+    expect(englishSpeech('It is 7:30, 2.5 km, the 1st day. Imagine')).toBe(
+      'It is 7:30, 2.5 km, the 1st day. Imagine',
+    )
   })
 
   it('reconnaît titres, listes et paragraphes du cours', () => {

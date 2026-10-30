@@ -37,6 +37,35 @@ export function speechSegments(text: string): SpeechSegment[] {
   return segments.filter((segment) => /[\p{L}\p{N}]/u.test(segment.text))
 }
 
+const ONES =
+  'zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen'.split(
+    ' ',
+  )
+const TENS = ' ten twenty thirty forty fifty sixty seventy eighty ninety'.split(' ')
+
+/** 342 → « three hundred and forty two » (anglais britannique), jusqu'à 999 999 */
+export function englishNumber(n: number): string {
+  if (n < 20) return ONES[n] as string
+  if (n < 100) return `${TENS[Math.floor(n / 10)]}${n % 10 ? ` ${ONES[n % 10]}` : ''}`
+  const [unit, size] = n < 1000 ? ['hundred', 100] : ['thousand', 1000]
+  const rest = n % size
+  const joiner = rest && rest < 100 ? ' and ' : ' '
+  return `${englishNumber(Math.floor(n / size))} ${unit}${rest ? joiner + englishNumber(rest) : ''}`
+}
+
+/**
+ * Texte anglais envoyé à la voix (jamais affiché) : certains moteurs vocaux lisent
+ * les nombres et le pronom « I » avec les règles du français, même avec une voix anglaise.
+ * Les nombres à virgule, les heures et les ordinaux (1st) sont laissés tels quels.
+ */
+export function englishSpeech(text: string): string {
+  return text
+    .replace(/(?<!\d|\d[.,:])\d{1,6}(?!\d|[.,:]\d|st\b|nd\b|rd\b|th\b)/g, (digits) =>
+      englishNumber(Number(digits)),
+    )
+    .replace(/\bI\b/g, 'eye')
+}
+
 /** « 12 octobre 2026 » */
 export function formatDate(date: Date): string {
   return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
