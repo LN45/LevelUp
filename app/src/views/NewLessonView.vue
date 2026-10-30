@@ -8,6 +8,7 @@ import { ApiError, MAX_IMAGES, extractCourse } from '@/api'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import KitsuneMascot from '@/components/KitsuneMascot.vue'
 import SpeakButton from '@/components/SpeakButton.vue'
+import { provideSubjectLanguage } from '@/composables/useSpeech'
 import { LESSON_TITLE_MAX_LENGTH, useLessonsStore } from '@/stores/lessons'
 import { useSubjectsStore } from '@/stores/subjects'
 import { blobToBase64, compressPhoto } from '@/utils/images'
@@ -27,6 +28,9 @@ const message = ref('')
 // Matière déjà choisie quand on vient de la page d'une matière (?subject=id)
 const presetSubject = Number(useRoute().query.subject) || null
 const draft = reactive({ title: '', text: '', subjectId: presetSubject })
+provideSubjectLanguage(
+  () => subjects.value?.find((subject) => subject.id === draft.subjectId)?.name,
+)
 let saved = false
 
 const PHOTO_TIP = 'Prends ton cours en photo, page par page, bien à plat et avec de la lumière.'
@@ -281,7 +285,8 @@ onBeforeUnmount(() => photos.value.forEach((photo) => URL.revokeObjectURL(photo.
         />
         <p id="lesson-text-help" class="help">
           Les lignes qui commencent par # sont des titres, celles qui commencent par - des listes.
-          Les mots entre **deux étoiles** s’affichent en gras.
+          Les mots entre **deux étoiles** s’affichent en gras. Les mots entre [crochets] sont lus
+          dans la langue de la matière (anglais, espagnol, allemand).
         </p>
       </div>
 

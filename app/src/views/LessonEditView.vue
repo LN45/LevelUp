@@ -160,7 +160,8 @@ onBeforeRouteLeave(async () => !isDirty.value || ((await leaveDialog.value?.open
     <h1>Corriger la leçon</h1>
     <p class="intro">
       Modifie ou supprime ce qui est inexact, puis enregistre. Les champs ne peuvent pas rester
-      vides. Les mots entre **deux étoiles** s’affichent en gras.
+      vides. Les mots entre **deux étoiles** s’affichent en gras. Les mots entre [crochets] sont lus
+      dans la langue de la matière (anglais, espagnol, allemand).
     </p>
 
     <p v-if="notFound">Cette leçon n’existe plus.</p>

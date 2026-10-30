@@ -1,22 +1,40 @@
 export interface TextPart {
   text: string
   bold: boolean
+  /** Passage [entre crochets] : dans la langue de la matière (anglais, espagnol…) */
+  foreign: boolean
 }
 
-/** Découpe « un **mot** clé » en morceaux normaux et en gras (sans HTML, donc sans injection) */
-export function splitBold(text: string): TextPart[] {
-  return text
-    .split('**')
-    .map((part, i) => ({ text: part, bold: i % 2 === 1 }))
-    .filter((part) => part.text)
+// « [illisible] » : ancienne marque de la lecture des photos, en français
+const RICH_TOKENS = /(\*\*|\[illisible\]|\[|\])/
+
+/** Découpe « un **mot** et [a word] » en morceaux (sans HTML, donc sans injection) */
+export function splitRich(text: string): TextPart[] {
+  const parts: TextPart[] = []
+  let bold = false
+  let foreign = false
+  for (const token of text.split(RICH_TOKENS)) {
+    if (token === '**') bold = !bold
+    else if (token === '[') foreign = true
+    else if (token === ']') foreign = false
+    else if (token) parts.push({ text: token, bold, foreign })
+  }
+  return parts
 }
 
-/** Texte sans marques de mise en forme, pour la lecture vocale */
-export function plainText(text: string): string {
-  return text
-    .replace(/\*\*/g, '')
-    .replace(/^\s*#+\s*/gm, '')
-    .replace(/^\s*-\s+/gm, '')
+export type SpeechSegment = Omit<TextPart, 'bold'>
+
+/** Morceaux à lire à voix haute, sans marques de mise en forme, chacun dans sa langue */
+export function speechSegments(text: string): SpeechSegment[] {
+  const plain = text.replace(/^\s*#+\s*/gm, '').replace(/^\s*-\s+/gm, '')
+  const segments: SpeechSegment[] = []
+  for (const { text: part, foreign } of splitRich(plain)) {
+    const last = segments[segments.length - 1]
+    if (last?.foreign === foreign) last.text += part
+    else segments.push({ text: part, foreign })
+  }
+  // Un morceau sans lettre ni chiffre (ponctuation seule) n'a rien à lire
+  return segments.filter((segment) => /[\p{L}\p{N}]/u.test(segment.text))
 }
 
 /** « 12 octobre 2026 » */

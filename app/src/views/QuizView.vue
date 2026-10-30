@@ -10,6 +10,7 @@ import ProgressBar from '@/components/ProgressBar.vue'
 import RichText from '@/components/RichText.vue'
 import SpeakButton from '@/components/SpeakButton.vue'
 import { useReviewSession } from '@/composables/useReviewSession'
+import { provideSubjectLanguage } from '@/composables/useSpeech'
 import {
   addXp,
   db,
@@ -31,6 +32,8 @@ const isReview = route.name === 'review'
 const { settings } = storeToRefs(useSettingsStore())
 
 const lesson = ref<Lesson | null>(null)
+const subjectName = ref<string>()
+provideSubjectLanguage(() => subjectName.value)
 const questions = ref<QuizQuestion[]>([])
 const loaded = ref(false)
 /** QCM et vrai/faux : index du choix touché */
@@ -55,6 +58,7 @@ async function load() {
     totalXp(),
   ])
   lesson.value = found ?? null
+  subjectName.value = found && (await db.subjects.get(found.subjectId))?.name
   questions.value = lessonQuestions
   levelAtStart.value = levelInfo(xp).level
   resetAnswer()

@@ -296,6 +296,7 @@ Règles pour tout le contenu :
 - Reprends les définitions du cours au plus près de ses mots.
 - Attention aux mots contraires (par exemple fertile et stérile, actif et endormi) : chacun a sa propre définition, souvent opposée.
 - Écris en français, avec un vocabulaire simple de 6e.
+- Entoure de crochets chaque mot ou passage dans une autre langue que le français (par exemple dans un cours d'anglais : On dit [Good morning] le matin.), comme dans le cours. N'utilise jamais de crochets pour autre chose.
 - Phrases courtes : 15 mots maximum.
 - Mets en gras avec **deux étoiles** seulement le mot-clé le plus important d'une phrase ou d'une question (un ou deux mots maximum) : le gras doit rester rare.
 

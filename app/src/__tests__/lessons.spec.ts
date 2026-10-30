@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, generateLesson } from '@/api'
 import { db, type GeneratedContent } from '@/db'
 import { useLessonsStore } from '@/stores/lessons'
-import { courseLines, plainText, splitBold } from '@/utils/text'
+import { courseLines, speechSegments, splitRich } from '@/utils/text'
 
 vi.mock('@/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api')>()),
@@ -75,17 +75,45 @@ describe('génération d’une leçon', () => {
 })
 
 describe('mise en forme du texte', () => {
+  const part = (text: string, bold = false, foreign = false) => ({ text, bold, foreign })
+
   it('découpe le gras sans HTML', () => {
-    expect(splitBold('Un **volcan** actif')).toEqual([
-      { text: 'Un ', bold: false },
-      { text: 'volcan', bold: true },
-      { text: ' actif', bold: false },
+    expect(splitRich('Un **volcan** actif')).toEqual([
+      part('Un '),
+      part('volcan', true),
+      part(' actif'),
     ])
-    expect(splitBold('<b>pas du HTML</b>')).toEqual([{ text: '<b>pas du HTML</b>', bold: false }])
+    expect(splitRich('<b>pas du HTML</b>')).toEqual([part('<b>pas du HTML</b>')])
   })
 
-  it('retire les marques avant la lecture vocale', () => {
-    expect(plainText('# Les **volcans**\n- la lave')).toBe('Les volcans\nla lave')
+  it('repère les passages en langue étrangère, même en gras', () => {
+    expect(splitRich('Le mot [the **cat**] veut dire chat.')).toEqual([
+      part('Le mot '),
+      part('the ', false, true),
+      part('cat', true, true),
+      part(' veut dire chat.'),
+    ])
+    expect(splitRich('On dit [Hello')).toEqual([part('On dit '), part('Hello', false, true)])
+  })
+
+  it('garde « [illisible] » en français', () => {
+    expect(splitRich('Le [illisible] rouge')).toEqual([
+      part('Le '),
+      part('[illisible]'),
+      part(' rouge'),
+    ])
+  })
+
+  it('prépare la lecture vocale sans marques, langue par langue', () => {
+    expect(speechSegments('# Les **volcans**\n- la lave')).toEqual([
+      { text: 'Les volcans\nla lave', foreign: false },
+    ])
+    expect(speechSegments('On dit [**Hello**] et [Goodbye].')).toEqual([
+      { text: 'On dit ', foreign: false },
+      { text: 'Hello', foreign: true },
+      { text: ' et ', foreign: false },
+      { text: 'Goodbye', foreign: true },
+    ])
   })
 
   it('reconnaît titres, listes et paragraphes du cours', () => {

@@ -1,7 +1,16 @@
-import { computed, onBeforeUnmount, ref, useId } from 'vue'
+import {
+  computed,
+  inject,
+  onBeforeUnmount,
+  provide,
+  ref,
+  useId,
+  type InjectionKey,
+  type Ref,
+} from 'vue'
 
 import { useSettingsStore } from '@/stores/settings'
-import { plainText } from '@/utils/text'
+import { speechSegments } from '@/utils/text'
 
 // Une seule lecture à la fois dans toute l'appli
 const speakingId = ref<string | null>(null)
@@ -11,17 +20,45 @@ const RATES = { normal: 1, slow: 0.75 } as const
 
 export const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
 
-/** Meilleure voix française disponible : fr-FR locale, puis fr-FR, puis toute voix fr-* */
-export function pickFrenchVoice(
+/** Meilleure voix pour une langue (« fr-FR ») : exacte et locale, puis exacte, puis même langue (fr-*) */
+export function pickVoice(
   voices: readonly SpeechSynthesisVoice[],
+  lang: string,
 ): SpeechSynthesisVoice | undefined {
-  const lang = (voice: SpeechSynthesisVoice) => voice.lang.replace('_', '-').toLowerCase()
-  const frFR = voices.filter((voice) => lang(voice) === 'fr-fr')
+  const normalize = (code: string) => code.replace('_', '-').toLowerCase()
+  const wanted = normalize(lang)
+  const base = wanted.split('-')[0]
+  const exact = voices.filter((voice) => normalize(voice.lang) === wanted)
   return (
-    frFR.find((voice) => voice.localService) ??
-    frFR[0] ??
-    voices.find((voice) => lang(voice).startsWith('fr'))
+    exact.find((voice) => voice.localService) ??
+    exact[0] ??
+    voices.find((voice) => normalize(voice.lang).split('-')[0] === base)
   )
+}
+
+const SUBJECT_LANGUAGES: Record<string, string> = {
+  anglais: 'en-GB',
+  espagnol: 'es-ES',
+  allemand: 'de-DE',
+}
+
+/** Langue des passages [entre crochets] d'après le nom de la matière (null : lus en français) */
+export function subjectLanguage(subjectName: string | undefined): string | null {
+  return SUBJECT_LANGUAGES[subjectName?.trim().toLowerCase() ?? ''] ?? null
+}
+
+const foreignLanguageKey: InjectionKey<Readonly<Ref<string | null>>> = Symbol('foreignLanguage')
+
+/** Écran d'une leçon : les passages [entre crochets] de ses textes sont dans la langue de sa matière */
+export function provideSubjectLanguage(subjectName: () => string | undefined) {
+  provide(
+    foreignLanguageKey,
+    computed(() => subjectLanguage(subjectName())),
+  )
+}
+
+export function useForeignLanguage(): Readonly<Ref<string | null>> {
+  return inject(foreignLanguageKey, ref(null))
 }
 
 function stopAll() {
@@ -33,6 +70,7 @@ function stopAll() {
 /** Lecture vocale propre à un composant : en lancer une autre ailleurs arrête celle-ci */
 export function useSpeech() {
   const settingsStore = useSettingsStore()
+  const foreignLanguage = useForeignLanguage()
   const id = useId()
   const speaking = computed(() => speakingId.value === id)
 
@@ -40,25 +78,36 @@ export function useSpeech() {
   function speak(text: string, onEnd?: () => void) {
     if (!speechSupported) return
     stopAll()
-    const utterance = new SpeechSynthesisUtterance(plainText(text))
-    utterance.lang = 'fr-FR'
-    utterance.rate = RATES[settingsStore.settings.speechRate]
-    const voice = pickFrenchVoice(window.speechSynthesis.getVoices())
-    if (voice) utterance.voice = voice
+    const voices = window.speechSynthesis.getVoices()
+    // Une lecture par morceau : une voix ne change pas de langue en cours de phrase
+    const utterances = speechSegments(text).map((segment) => {
+      const lang = (segment.foreign && foreignLanguage.value) || 'fr-FR'
+      const utterance = new SpeechSynthesisUtterance(segment.text)
+      utterance.lang = lang
+      utterance.rate = RATES[settingsStore.settings.speechRate]
+      const voice = pickVoice(voices, lang)
+      if (voice) utterance.voice = voice
+      return utterance
+    })
+    const last = utterances[utterances.length - 1]
+    if (!last) {
+      onEnd?.()
+      return
+    }
     const finish = () => {
-      if (currentUtterance !== utterance) return false
+      if (currentUtterance !== last) return false
       currentUtterance = null
       speakingId.value = null
       return true
     }
-    utterance.onerror = finish
-    utterance.onend = () => {
+    last.onerror = finish
+    last.onend = () => {
       if (finish()) onEnd?.()
     }
 
-    currentUtterance = utterance
+    currentUtterance = last
     speakingId.value = id
-    window.speechSynthesis.speak(utterance)
+    for (const utterance of utterances) window.speechSynthesis.speak(utterance)
   }
 
   function stop() {

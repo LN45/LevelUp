@@ -381,6 +381,14 @@ describe('nettoyage de la sortie de l’IA', () => {
     expect(isGrounded('Stérile', course)).toBe(false)
   })
 
+  it('reconnaît une citation malgré les crochets de langue étrangère', () => {
+    const course = 'On dit [Good morning] le matin.'
+    expect(isGrounded('On dit Good morning le matin.', course)).toBe(true)
+    expect(isGrounded('On dit [Good morning] le matin.', 'On dit Good morning le matin.')).toBe(
+      true,
+    )
+  })
+
   it('écarte les phrases et définitions dont la citation est absente du cours', () => {
     const result = normalize(
       {

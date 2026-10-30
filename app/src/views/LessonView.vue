@@ -8,6 +8,7 @@ import ProgressBar from '@/components/ProgressBar.vue'
 import RichText from '@/components/RichText.vue'
 import SpeakButton from '@/components/SpeakButton.vue'
 import { useLiveQuery } from '@/composables/useLiveQuery'
+import { provideSubjectLanguage } from '@/composables/useSpeech'
 import { db } from '@/db'
 import { useLessonsStore } from '@/stores/lessons'
 import { progressByLesson, progressText } from '@/utils/progress'
@@ -34,6 +35,7 @@ const data = useLiveQuery(
   loadLesson,
   undefined as Awaited<ReturnType<typeof loadLesson>> | undefined,
 )
+provideSubjectLanguage(() => data.value?.subject?.name)
 
 const isGenerating = computed(() => lessonsStore.generating.has(lessonId))
 const error = computed(() => lessonsStore.generationErrors.get(lessonId))
@@ -116,7 +118,7 @@ const definitionsSpeech = computed(
         <ul class="points">
           <li v-for="item in sheet.definitions" :key="item.term" class="card point">
             <p class="point-body">
-              <strong>{{ item.term }}</strong> : <RichText :text="item.definition" />
+              <strong><RichText :text="item.term" /></strong> : <RichText :text="item.definition" />
             </p>
             <SpeakButton :text="`${item.term} : ${item.definition}`" />
           </li>

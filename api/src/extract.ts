@@ -31,7 +31,8 @@ Règles :
 - Corrige en silence l'orthographe, la grammaire et la ponctuation. Ne signale jamais les fautes.
 - N'ajoute rien qui ne figure pas sur les photos. Ne résume pas, n'explique pas.
 - Garde la structure en Markdown simple : titres avec # ou ##, listes avec -, une ligne vide entre les paragraphes.
-- Écris [illisible] à la place d'un passage impossible à lire.
+- Entoure de crochets chaque mot ou passage écrit dans une autre langue que le français, par exemple : On dit [Good morning] le matin. N'utilise jamais de crochets pour autre chose.
+- Écris (illisible) à la place d'un passage impossible à lire.
 - Ne recopie jamais le nom de l'élève, du professeur, de la classe ni de l'établissement (en-têtes, étiquettes de cahier). Garde les noms qui font partie du cours (personnages historiques, auteurs, lieux).
 Réponds uniquement avec un objet JSON, sans balises Markdown autour, avec exactement ces trois champs :
 - "legible" : true si tu as pu lire la page, même en partie ; false seulement si la photo ne montre aucun cours lisible.
